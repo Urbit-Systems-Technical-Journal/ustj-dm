@@ -1,65 +1,10 @@
-\documentclass[twoside]{article}
+\section{Directed Messaging}\label{directed-messaging}
 
-\usepackage{ustj}
+\emph{Ted Blackman, Joe Bryan, Luke Champine}
 
-\addbibresource{mss.bib}
+\emph{Pyry Kovanen, Jose Cisneros, Liam Fitzgerald}
 
-\newcommand{\authorname}{Ted Blackman \patp{rovnys-ricfer},* \\ Joe Bryan \patp{master-morzod},† \\ Luke Champine \patp{watter-parter},* \\ Pyry Kovanen \patp{dinleb-rambep},† \\ Jose Cisneros \patp{norsyr-torren},† \\ Liam Fitzgerald \patp{hastuc-dibtux}‡}
-% \newcommand{\authorpatp}{\patp{sampel-palnet}}
-\newcommand{\affiliation}{* Martian Engineering, \\ † Tlon Corporation, \\ ‡ Axiomatic Systems}
-
-%  Make first page footer:
-\fancypagestyle{firststyle}{%
-\fancyhf{}% Clear header/footer
-\fancyhead{}
-\fancyfoot[L]{{\footnotesize
-              %% We toggle between these:
-              Manuscript submitted for review.\\
-              % {\it Urbit Systems Technical Journal} I:1 (2024):  1–3. \\
-              ~ \\
-              Address author correspondence to \authorpatp.
-              }}
-}
-%  Arrange subsequent pages:
-\fancyhf{}
-\fancyhead[LE]{{\urbitfont Urbit Systems Technical Journal}}
-\fancyhead[RO]{Directed Messaging}
-\fancyfoot[LE,RO]{\thepage}
-
-%%MANUSCRIPT
-\title{Directed Messaging}
-\author{\authorname \\ \affiliation}
-\date{}
-
-\begin{document}
-
-\maketitle
-\thispagestyle{firststyle}
-
-\begin{abstract}
-\sloppy
-The Directed Messaging project was a fundamental overhaul of Urbit's
-networking stack. It rewrote the protocol definition and the protocol
-implementation, split between Hoon code inside Arvo (the Urbit overlay
-OS), and C code in Vere (the Urbit runtime). Directed Messaging
-addressed several major limitations of Urbit's previous networking
-stack: it increased throughput by over $100\times$, improved peer discovery
-reliability, enabled the scalability of content delivery, and introduced
-a modular internal architecture that reduced implementation complexity.
-Directed Messaging is an encrypted, authenticated, peer-to-peer,
-connectionless, packet-switched, message-oriented, content-centric,
-transactional network protocol with its own congestion control,
-transmission control, and packet-level authentication. It was deployed
-to the Urbit network in early 2025.
-\end{abstract}
-
-% We will adjust page numbering in final editing.
-\pagenumbering{arabic}
-\setcounter{page}{1}
-
-\tableofcontents
-
-The Directed Messaging project was a fundamental overhaul of Urbit's
+The Directed messaging project was a fundamental overhaul of Urbit's
 networking stack. It rewrote the protocol definition and the protocol
 implementation, split between Hoon code inside Arvo (the Urbit overlay
 OS), and C code in Vere (the Urbit runtime). Directed Messaging
@@ -167,7 +112,7 @@ utilization. The implementation that was deployed contains a major
 optimization: specialized arena allocators to reduce memory management
 overhead.
 
-\section{High-Level Protocol Design: Request/Response, Namespace
+\subsection{High-Level Protocol Design: Request/Response, Namespace
 Reads}\label{high-level-protocol-design-requestresponse-namespace-reads}
 
 The protocol design is based off the idea of a remote namespace read,
@@ -288,9 +233,9 @@ using the same congestion control as downloading any other potentially
 large datum -- and, importantly, those incremental downloads do not
 necessarily trigger unnecessarily frequent disk writes.
 
-\section{Routing}\label{routing}
+\subsection{Routing}\label{routing}
 
-\subsection{Directed Routing}\label{directed-routing}
+\subsubsection{Directed Routing}\label{directed-routing}
 
 The Directed Messaging gets its name from its routing scheme, which
 treats each bidirectional communication between two Urbit ships as
@@ -307,7 +252,7 @@ node or ``star'' infrastructure node) responsible for relaying packets
 to that ship. In contrast, in directed routing, the request and the
 response both use the same relay: the responder ship's sponsor.
 
-\subsubsection{Request (Same for both Directed and Criss-Cross
+\paragraph{Request (Same for both Directed and Criss-Cross
 Routing)}\label{request-same-for-both-directed-and-criss-cross-routing}
 
 \begin{verbatim}
@@ -316,7 +261,7 @@ requester's sponsor       -------- responder's sponsor
 requester  ------------                 ---> responder
 \end{verbatim}
 
-\subsubsection{Response (Directed Routing)}\label{response-directed-routing}
+\paragraph{Response (Directed Routing)}\label{response-directed-routing}
 
 \begin{verbatim}
 requester's sponsor       -------- responder's sponsor
@@ -324,7 +269,7 @@ requester's sponsor       -------- responder's sponsor
 requester  <-----------                 ---- responder
 \end{verbatim}
 
-\subsubsection{Response (Criss-Cross
+\paragraph{Response (Criss-Cross
 Routing)}\label{response-criss-cross-routing}
 
 \begin{verbatim}
@@ -333,7 +278,7 @@ requester's sponsor -----          responder's sponsor
 requester <---              ---------------  responder
 \end{verbatim}
 
-\subsection{Relaying}\label{relaying}
+\subsubsection{Relaying}\label{relaying}
 
 Making the directedness of communication legible to relays and Urbit
 runtimes allows the protocol to be a faithful, if Urbit-specific, Named
@@ -381,7 +326,7 @@ Urbit ship's runtime has a cache for its own responses, but supernodes
 (galaxies and stars) do not yet cache responses from their sponsored
 ships.
 
-\subsection{Peer Discovery}\label{peer-discovery}
+\subsubsection{Peer Discovery}\label{peer-discovery}
 
 Urbit is a peer-to-peer network. Only root nodes (galaxies) list their
 own IP addresses publicly (on the Ethereum blockchain); all other ships
@@ -439,7 +384,7 @@ in principle, but one drawback has to do with ``route tightening''
 otherwise every response will flow through the requester's sponsor, even
 if the requester is not behind a firewall.
 
-\subsection{Route Tightening}\label{route-tightening}
+\subsubsection{Route Tightening}\label{route-tightening}
 
 It is better for performance, scaling, and individual sovereignty to
 obtain a direct route to another ship, rather than communicating through
@@ -470,7 +415,7 @@ direct route, and it automatically tightens to the direct route if the
 direct route is responsive and loosens to the galaxy route if the direct
 route becomes unresponsive.
 
-\section{Authentication and
+\subsection{Authentication and
 Encryption}\label{authentication-and-encryption}
 
 Directed Messaging is always authenticated and it supports encryption,
@@ -541,10 +486,10 @@ It's purely a data representation concern, not a cryptographic
 feature---without it, you'd silently lose any ciphertext bytes that
 happen to be zero at the end.
 
-\subsection{Message Authentication and Encryption
+\subsubsection{Message Authentication and Encryption
 Details}\label{message-authentication-and-encryption-details}
 
-\subsubsection{Overlay Namespaces}\label{overlay-namespaces}
+\paragraph{Overlay Namespaces}\label{overlay-namespaces}
 
 Each of the three privacy modes has its own ``overlay namespace'',
 i.e.~a part of the scry namespace that somehow transforms values bound
@@ -578,7 +523,7 @@ what privacy mode it wants to use for a piece of data it publishes, and
 the kernel enforces that by exposing it over the network using the
 appropriate overlay namespace.
 
-\subsubsection{\%publ namespace (unencrypted
+\paragraph{\%publ namespace (unencrypted
 public)}\label{publ-namespace-unencrypted-public}
 
 Authentication: Ed25519 signature only (no encryption)
@@ -661,7 +606,7 @@ Use cases:
   distribution is required
 \end{itemize}
 
-\subsubsection{\%shut namespace (group
+\paragraph{\%shut namespace (group
 encrypted)}\label{shut-namespace-group-encrypted}
 
 Authentication: Ed25519 signature over encrypted data
@@ -742,7 +687,7 @@ Privacy properties:
   which content is being accessed
 \end{itemize}
 
-\subsubsection{\%chum namespace (1-to-1
+\paragraph{\%chum namespace (1-to-1
 encrypted)}\label{chum-namespace-1-to-1-encrypted}
 
 Authentication: HMAC only (no signatures)
@@ -826,14 +771,14 @@ Privacy properties:
   Key rotation is supported through the life counters
 \end{itemize}
 
-\subsubsection{Other Cryptographic
+\paragraph{Other Cryptographic
 Properties}\label{other-cryptographic-properties}
 
 Directed Messaging relies on the ability to rotate keys on chain for its
 forward secrecy. Future versions of the protocol might add a ratchet to
 minimize the damage if a private key is compromised.
 
-\subsection{Packet Authentication}\label{packet-authentication}
+\subsubsection{Packet Authentication}\label{packet-authentication}
 
 TODO: more closely match the tone of the rest of this document TODO:
 more diagrams, clearer explanation of Lackman traversal
@@ -1063,7 +1008,7 @@ has five leaves, we would need to send at least three sibling hashes for
 the verifier to recompute the root, but our packet framing only allows
 up to two hashes.
 
-\subsubsection{Arena Allocator}\label{arena-allocator}
+\paragraph{Arena Allocator}\label{arena-allocator}
 
 Directed Messaging uses a simple bump allocator arena for memory
 management. Each arena is a contiguous block of memory with three
@@ -1151,7 +1096,7 @@ space, but allocation is extremely fast (just pointer arithmetic), and
 the single-free design eliminates per-object deallocation overhead and
 fragmentation issues.
 
-\subsubsection{Download Checkpointing}\label{download-checkpointing}
+\paragraph{Download Checkpointing}\label{download-checkpointing}
 
 This has not been deployed to the network, but this design allows the
 requesting ship's runtime to inject jumbo frames of arbitrary size into
@@ -1185,7 +1130,7 @@ Checkpointing has another benefit. No matter how large a message is, the
 downloader can keep a fixed upper bound on the memory footprint while
 download that message, proportional to one jumbo frame.
 
-\subsubsection{Download Resumption}\label{download-resumption}
+\paragraph{Download Resumption}\label{download-resumption}
 
 After a transient failure -- most commonly a process crash or machine
 restart -- a requesting ship can resume a download. In order to pick up
@@ -1207,7 +1152,7 @@ HTTP. HTTP has resumption headers, but both client and server have to
 opt into using them, so in practice many HTTP-based downloads cannot be
 resumed.
 
-\section{Congestion Control}\label{congestion-control}
+\subsection{Congestion Control}\label{congestion-control}
 
 In Directed Messaging, congestion control is pluggable. The requesting
 ship decides how many request packets to send and at what time. The
@@ -1241,7 +1186,7 @@ architecture and packet-oriented nature. The protocol's congestion
 control differs from traditional TCP in several fundamental ways due to
 its pull-based communication model and implicit acknowledgment scheme.
 
-\subsection{Architectural Foundation}\label{architectural-foundation}
+\subsubsection{Architectural Foundation}\label{architectural-foundation}
 
 Unlike TCP's push-based model where senders transmit data and await
 separate acknowledgment packets, Directed Messaging operates on a
@@ -1259,7 +1204,7 @@ bloq parameter of 13). The congestion window (cwnd) measures capacity in
 fragment count rather than bytes, providing coarser but simpler
 granularity than TCP's byte-oriented approach.
 
-\subsection{State Variables}\label{state-variables}
+\subsubsection{State Variables}\label{state-variables}
 
 Congestion control state is maintained per peer and includes:
 
@@ -1283,7 +1228,7 @@ Per-request state tracks which fragments have been sent, when they were
 sent, how many retransmission attempts have occurred, and which
 fragments have been received using an efficient bitset representation.
 
-\subsection{Slow Start and Congestion
+\subsubsection{Slow Start and Congestion
 Avoidance}\label{slow-start-and-congestion-avoidance}
 
 The protocol implements two growth phases analogous to TCP:
@@ -1306,7 +1251,7 @@ The default ssthresh is initialized to 10,000 fragments (approximately
 10 MB), effectively allowing slow start to dominate for typical transfer
 sizes.
 
-\subsection{Loss Detection and
+\subsubsection{Loss Detection and
 Recovery}\label{loss-detection-and-recovery}
 
 Directed Messaging currently implements timeout-based loss detection
@@ -1341,7 +1286,7 @@ independently without tracking the ordering implications that would
 enable fast retransmit. This is a known simplification intended for
 future enhancement.
 
-\subsection{Round-Trip Time
+\subsubsection{Round-Trip Time
 Estimation}\label{round-trip-time-estimation}
 
 The protocol employs Jacobson/Karels RTT estimation, the same algorithm
@@ -1363,7 +1308,7 @@ Retransmitted fragments do not contribute to RTT estimation, following
 Karn's algorithm to avoid ambiguity about which transmission is being
 acknowledged.
 
-\subsection{Selective Request
+\subsubsection{Selective Request
 Architecture}\label{selective-request-architecture}
 
 The implicit acknowledgment scheme combines naturally with selective
@@ -1381,7 +1326,7 @@ proof predecessors arrive. Once authenticated, these fragments are
 marked received in the bitset, and the congestion control state updates
 accordingly.
 
-\subsection{Request Rate Limiting}\label{request-rate-limiting}
+\subsubsection{Request Rate Limiting}\label{request-rate-limiting}
 
 The congestion window limits the number of PEEK requests in flight.
 Before sending additional requests, the protocol calculates:
@@ -1399,7 +1344,7 @@ cannot be overwhelmed by data it didn't request, and the congestion
 control directly limits the rate at which the requester pulls data from
 the network.
 
-\subsection{Per-Peer State
+\subsubsection{Per-Peer State
 Management}\label{per-peer-state-management}
 
 Congestion control state is maintained per peer rather than per
@@ -1418,7 +1363,7 @@ However, this also means that multiple concurrent large transfers to the
 same peer must share available bandwidth, which could reduce throughput
 compared to per-flow windows in some scenarios.
 
-\subsection{Initial Window and
+\subsubsection{Initial Window and
 Probing}\label{initial-window-and-probing}
 
 New peer connections begin with conservative initial values: cwnd = 1,
@@ -1432,7 +1377,7 @@ becomes stale. Future enhancements may include state expiration and
 re-initialization after prolonged idle periods, though the current
 implementation maintains state indefinitely once a peer is known.
 
-\subsection{Comparison with TCP
+\subsubsection{Comparison with TCP
 Variants}\label{comparison-with-tcp-variants}
 
 The congestion control algorithm most closely resembles TCP Tahoe but
@@ -1453,7 +1398,7 @@ the selective request architecture provides the functional benefits of
 SACK naturally. The implicit acknowledgment scheme eliminates issues
 with ACK loss and compression that affect TCP.
 
-\subsection{Design Trade-offs}\label{design-trade-offs}
+\subsubsection{Design Trade-offs}\label{design-trade-offs}
 
 The congestion control design reflects several architectural trade-offs:
 
@@ -1468,7 +1413,7 @@ losses - Packet-oriented windows provide coarser bandwidth control -
 Per-peer state sharing may reduce throughput for concurrent flows -
 Modified timeout behavior is less studied than standard algorithms
 
-\subsection{Future Enhancements}\label{future-enhancements}
+\subsubsection{Future Enhancements}\label{future-enhancements}
 
 The protocol architecture supports several potential improvements
 without fundamental redesign. Fast retransmit could be implemented by
@@ -1483,7 +1428,7 @@ simplicity and effectiveness, providing reasonable congestion control
 while keeping the protocol accessible to implementation and formal
 verification.
 
-\section{Integration}\label{integration}
+\subsection{Integration}\label{integration}
 
 In order to deploy Directed Messaing to Urbit's live network, the
 previous version of the protocol needed to remain operational, since
@@ -1495,7 +1440,7 @@ downgrade it without data loss.
 This was possible due to the persistent, transactional nature of both
 the previous and new versions of the protocol.
 
-\subsection{Ames Flows}\label{ames-flows}
+\subsubsection{Ames Flows}\label{ames-flows}
 
 The Arvo kernel has a concept of an Ames ``flow'', a directed connection
 between ships where the subscriber ship can send commands and the
@@ -1506,7 +1451,7 @@ The implementation of Directed Messaging maintained the interface to the
 rest of the system, without modification. Applications do not need to
 modify their code at all to make use of Directed Messaging.
 
-\section{Future Work}\label{future-work}
+\subsection{Future Work}\label{future-work}
 
 TODO not sure what to include here
 
@@ -1524,9 +1469,3 @@ TODO not sure what to include here
 
 speculative: - add \%pine - add sticky scry Those together would flesh
 out a full pub-sub system with stateless publishers
-
-\tombstone
-
-\selectlanguage{USenglish}
-% \printbibliography
-\end{document}
