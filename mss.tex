@@ -43,7 +43,7 @@ networking stack. It rewrote the protocol definition and the protocol
 implementation, split between Hoon code inside Arvo (the Urbit overlay
 OS), and C code in Vere (the Urbit runtime). Directed Messaging
 addressed several major limitations of Urbit's previous networking
-stack: it increased throughput by over $100\times$, improved peer discovery
+stack: it increased throughput by over 100$\times$, improved peer discovery
 reliability, enabled the scalability of content delivery, and introduced
 a modular internal architecture that reduced implementation complexity.
 Directed Messaging is an encrypted, authenticated, peer-to-peer,
@@ -64,7 +64,7 @@ networking stack. It rewrote the protocol definition and the protocol
 implementation, split between Hoon code inside Arvo (the Urbit overlay
 OS), and C code in Vere (the Urbit runtime). Directed Messaging
 addressed several major limitations of Urbit's previous networking
-stack: it increased throughput by over 100x, improved peer discovery
+stack: it increased throughput by over 100$\times$, improved peer discovery
 reliability, enabled the scalability of content delivery, and introduced
 a modular internal architecture that reduced implementation complexity.
 Directed Messaging is an encrypted, authenticated, peer-to-peer,
@@ -77,7 +77,7 @@ These improvements were driven by Directed Messaging's total adherence
 to a request-response discipline throughout the stack, bundled with
 heavy use of Urbit's immutable global namespace, called the ``scry
 namespace''. Every network message is either a request for data at a
-``scry path'' (Urbit's equivalent of a URL), or an authenticated
+``scry path'' (Urbit's equivalent of a \textsc{url}), or an authenticated
 response that includes the data at that path. This is true at the
 message layer and the packet layer, and for both reads (queries) and
 writes (commands).
@@ -93,7 +93,7 @@ majority of contemporary personal use cases.
 Directed Messaging managed to improve throughput while preserving
 Urbit's already-good latency performance: for small messages, a network
 transaction is accomplished in one roundtrip: a command sent one way,
-followed by an acknowledgment the other way. Due to Urbit's PKI (public
+followed by an acknowledgment the other way. Due to Urbit's \textsc{pki} (public
 key infrastructure) being disseminated to all nodes \emph{a priori} from
 a Byzantine fault-tolerant source (the Ethereum blockchain and a bespoke
 L2 for economic efficiency), no cryptographic handshake is needed for
@@ -108,7 +108,7 @@ runtime caching.
 
 In addition, directed messaging introduces a new procedure for peer
 discovery and routing that is much more reliable and performant than the
-previous setups. It deals better with NAT traversal and with using
+previous setups. It deals better with \textsc{nat} traversal and with using
 supernodes as relays more efficiently and reliably.
 
 All of this is done by simplifying the basic networking structure to
@@ -126,6 +126,7 @@ throughout the stack. The immutability is key to the scalability
 improvements and reliability improvements, and it also helps with
 single-threaded performance.
 
+\sloppy
 Along the way, we designed and implemented a novel scheme for streaming
 packet authentication. This helps prevent denial-of-service attacks that
 could forge individual packets and spoof them in order to invalidate a
@@ -138,7 +139,7 @@ trees is used to authenticate the packets within that message.
 
 This achieves a property that, to our knowledge, has not been
 demonstrated in prior packet authentication schemes: the ability to
-handle a different maximum transmission unit (MTU) at each hop in a
+handle a different maximum transmission unit (\textsc{mtu}) at each hop in a
 relay chain without losing packet-level authentication. It is a
 scale-invariant packet-authentication scheme, and it also has good
 memory use characteristics, due to a novel algorithm based on the
@@ -147,7 +148,7 @@ authors. A relay receiving packets of one size and emitting packets of
 another size only needs to hold one large packet in memory while
 streaming (e.g.~if receiving 1kiB packets and sending 16kiB packets, it
 only needs to store 16kiB of packet data at a time). It can seamlessly
-handle any MTU that is one kilobyte, two kilobytes, or any power-of-two
+handle any \textsc{mtu} that is one kilobyte, two kilobytes, or any power-of-two
 number of kilobytes above that, up to 128MiB.
 
 Another advantage of the directed messaging protocol is that much more
@@ -162,14 +163,14 @@ versions of Urbit's network protocol -- that was a severe bottleneck on
 the maximum throughput. The implementation in the runtime could be
 swapped out with another implementation written in another language, the
 congestion control algorithm could be swapped out, and parallelism
-strategies could readily be employed to increase multicore CPU
+strategies could readily be employed to increase multicore \textsc{cpu}
 utilization. The implementation that was deployed contains a major
 optimization: specialized arena allocators to reduce memory management
 overhead.
 
-\section{High-Level Protocol Design: Request/Response, Namespace
-Reads}\label{high-level-protocol-design-requestresponse-namespace-reads}
+\section{High-Level Protocol Design}\label{high-level-protocol-design}
 
+% Request/Response, Namespace Reads
 The protocol design is based off the idea of a remote namespace read,
 wherein a ``subscriber'' ship requests data from a ``publisher'' ship,
 and the publisher sends that data as the response. The publisher ship
@@ -179,6 +180,7 @@ Urbit's ``scry'' namespace and setting permissions appropriately
 subscriber ship, then, can download data from another ship by sending it
 a request for the data at a path and waiting for the response.
 
+\sloppy
 A network roundtrip is conceived of as a request, followed by a
 response. The request consists of a ``scry request'', i.e.~a request for
 data at a ``scry path''. An example scry path is
@@ -192,12 +194,12 @@ the day on September 22, 2025. When a ship receives a scry request over
 the network, it can respond by sending a ``scry response'' containing
 the datum bound to that path.
 
-Over the network, a network request is a single UDP packet that encodes
+Over the network, a network request is a single \textsc{udp} packet that encodes
 a scry path, limited to 384 characters so the request packet always fits
-into the internet-standard 1500-byte MTU (maximum transmission unit). A
+into the internet-standard 1500-byte \textsc{mtu} (maximum transmission unit). A
 scry response may consist of a single packet, or multiple packets,
 depending on the size of the datum bound to that path. If the datum is
-1kiB or less, the response is encoded into a single UDP packet.
+1kiB or less, the response is encoded into a single \textsc{udp} packet.
 Otherwise, the first scry response packet contains only the first 1kiB
 of the datum, along with a fixed-width field containing the number of
 bits in the whole datum.
@@ -337,11 +339,11 @@ requester <---              ---------------  responder
 
 Making the directedness of communication legible to relays and Urbit
 runtimes allows the protocol to be a faithful, if Urbit-specific, Named
-Data Networking (NDN) protocol, which had been Urbit's stated goal since
-2010. A Directed Messaging request packet acts as an NDN ``interest''
-packet, and a response packet acts as an NDN ``data'' packet.
+Data Networking (\textsc{ndn}) protocol, which had been Urbit's stated goal since
+2010. A Directed Messaging request packet acts as an \textsc{ndn} ``interest''
+packet, and a response packet acts as an \textsc{ndn} ``data'' packet.
 
-The NDN family of protocols, created by Van Jacobson et. al.~in the
+The \textsc{ndn} family of protocols, created by Van Jacobson et. al.~in the
 mid-2000s, differs from traditional networking protocols in that an
 interest packet has no sender address field -- the identity of the
 sender of a request is unknown to the network. Instead, a receiver
@@ -350,12 +352,12 @@ sends the response back to that. The notion of ``where'' varies
 depending on the layer of the stack the system is operating at: for an
 IP replacement, a relay would remember the physical interface
 (e.g.~Ethernet port) on which it heard the incoming request. When
-building on top of IP and UDP, as Directed Messaging does, a receiver
+building on top of IP and \textsc{udp}, as Directed Messaging does, a receiver
 remembers the IP and port of the sender.
 
 Previous Urbit network protocols still included the sender's Urbit
 identity in the request packets, failing to achieve the ``source
-independence'' property that defines NDN. Directed Messaging is
+independence'' property that defines \textsc{ndn}. Directed Messaging is
 completely source-independent for reads, and for commands, it piggybacks
 a source-independent response onto a source-independent request in such
 a way that the receiver does know which Urbit address sent the request,
@@ -368,7 +370,7 @@ direction. This minimizes the data storage and synchronization
 requirements for nodes, which could become significant at scale.
 
 Source independence entails stateful routing. Directed Messaging adopts
-NDN's Pending Interest Table, which stores a mapping from each
+\textsc{ndn}'s Pending Interest Table, which stores a mapping from each
 outstanding request to the IP and port that sent that request. If the
 request times out (after roughly 30 seconds), or the request is
 satisfied by a response, the request is deleted from the table.
@@ -397,13 +399,13 @@ easier to reason about.
 
 The main difficulties with criss-cross routing stem from the structure
 of the internet. Most residential internet connections live behind a
-firewall that blocks all unsolicited incoming UDP packets. A laptop at
+firewall that blocks all unsolicited incoming \textsc{udp} packets. A laptop at
 home can send an outgoing packet to some destination IP and port, and
 the router will relay response packets back to the laptop for some time
 afterward, usually 30 seconds, as long as those response packets come
 from that same destination IP and port.
 
-A UDP-based peer-to-peer network, then, needs to include not only
+A \textsc{udp}-based peer-to-peer network, then, needs to include not only
 residential nodes but also nodes on the public internet, not behind
 firewalls. These nodes must be discoverable so that residential nodes
 can ping them every 25 seconds, to ensure the residential nodes can
@@ -430,6 +432,7 @@ through the network as the request packet had, just reversed. Since this
 request had gone through this galaxy, the response must also route
 through the galaxy.
 
+\sloppy
 In Urbit's previous protocols, in contrast, the response would go
 directly from the sponsored ship back to the requesting ship, and also
 potentially through the requesting ship's sponsoring galaxy. This works
@@ -479,7 +482,7 @@ publish data into its namespace without encryption. Response messages
 are signed using the ship's private key. The signature attests to the
 scry binding: the pair of the scry path and the datum at that path. -
 \textbf{One-to-One Encrypted Reads:} A ship can make data available to a
-single peer ship. Response messages are authenticated via external HMAC
+single peer ship. Response messages are authenticated via external \textsc{hmac}
 and internal signature. They are encrypted using a symmetric key derived
 from the Diffie-Hellman key exchange of the two ships' keys. -
 \textbf{Commands:} Commands and their acks are both handled as
@@ -599,7 +602,7 @@ Authentication: Ed25519 signature only (no encryption)
 \item
   The encoded beam path
 \item
-  The LSS root of the unencrypted jammed data
+  The \textsc{lss} root of the unencrypted jammed data
 \end{itemize}
 
 \begin{enumerate}
@@ -672,7 +675,7 @@ Authentication: Ed25519 signature over encrypted data
 \item
   Message encryption: The message is encrypted with XChaCha20-8 using a
   group symmetric key. The key is provided via the \%keen task (not
-  derived from ECDH). The encrypted path indicates which group key to
+  derived from \textsc{ecdh}). The encrypted path indicates which group key to
   use.
 \item
   Signature authentication: A 64-byte Ed25519 signature is computed
@@ -684,7 +687,7 @@ Authentication: Ed25519 signature over encrypted data
 \item
   The encoded beam path
 \item
-  The LSS root of the encrypted data
+  The \textsc{lss} root of the encrypted data
 \end{itemize}
 
 \begin{enumerate}
@@ -745,17 +748,17 @@ Privacy properties:
 \subsubsection{\%chum namespace (1-to-1
 encrypted)}\label{chum-namespace-1-to-1-encrypted}
 
-Authentication: HMAC only (no signatures)
+Authentication: \textsc{hmac} only (no signatures)
 
 \begin{enumerate}
 \def\labelenumi{\arabic{enumi}.}
 \tightlist
 \item
   Message encryption: The message is encrypted with XChaCha20-8 using a
-  symmetric key derived from Curve25519 ECDH key exchange between the
+  symmetric key derived from Curve25519 \textsc{ecdh} key exchange between the
   two ships' networking keys.
 \item
-  HMAC authentication: A 16-byte HMAC (Blake3 keyed hash) is computed
+  \textsc{hmac} authentication: A 16-byte \textsc{hmac} (Blake3 keyed hash) is computed
   over:
 \end{enumerate}
 
@@ -764,7 +767,7 @@ Authentication: HMAC only (no signatures)
 \item
   The encoded beam path
 \item
-  The LSS root of the encrypted data
+  The \textsc{lss} root of the encrypted data
 \end{itemize}
 
 \begin{enumerate}
@@ -772,14 +775,14 @@ Authentication: HMAC only (no signatures)
 \setcounter{enumi}{2}
 \tightlist
 \item
-  Shared symmetric key: Both HMAC computation and encryption use the
-  same ECDH-derived symmetric key. Both parties can independently derive
+  Shared symmetric key: Both \textsc{hmac} computation and encryption use the
+  same \textsc{ecdh}-derived symmetric key. Both parties can independently derive
   this key from their own private key and the other party's public key.
 \item
-  Verification: The receiver verifies the HMAC using the shared
+  Verification: The receiver verifies the \textsc{hmac} using the shared
   symmetric key, then decrypts with the same key.
 \item
-  Security model: The HMAC proves the sender possesses the shared
+  Security model: The \textsc{hmac} proves the sender possesses the shared
   symmetric key (implicitly authenticating them as the expected peer).
   No signatures are needed since only two parties share this key. This
   applies to both pokes and acks.
@@ -797,16 +800,16 @@ Components:
 \item
   server-life: The life (key revision number) of the server ship's
   networking keys, used to identify which version of their keys to use
-  for ECDH key derivation.
+  for \textsc{ecdh} key derivation.
 \item
   client-ship: The @p address of the client ship in the communication
   pair.
 \item
   client-life: The life of the client ship's networking keys, used to
-  identify which version of their keys to use for ECDH key derivation.
+  identify which version of their keys to use for \textsc{ecdh} key derivation.
 \item
   encrypted-path: The actual user path, encrypted using the symmetric
-  ECDH key derived from both ships' networking keys. This makes the scry
+  \textsc{ecdh} key derived from both ships' networking keys. This makes the scry
   path opaque to network observers.
 \end{enumerate}
 
@@ -890,7 +893,7 @@ This is a \href{https://eprint.iacr.org/2021/038}{binary numeral tree}:
 a structure composed of perfect binary trees, imposed upon a flat
 sequence of bytes. The numbers 0-18 represent leaf data (typically 1 KiB
 per leaf), while letters \emph{a}-\emph{r} represents tree hashes that
-are used to verify the leaves. So packet 3 would contain bytes 3072-4096
+are used to verify the leaves. So packet 3 would contain bytes 3072--4096
 and leaf hash \emph{d}.
 
 The main problem with this approach is that it requires buffering. In
@@ -1087,7 +1090,7 @@ the entry itself plus a linked list of address records.
 
 \textbf{Pending requests} allocate arenas at \textbf{5× the expected
 message size}. A request receiving a 1 MiB message gets a 5 MiB arena.
-This single arena holds the request state, fragment data buffer, LSS
+This single arena holds the request state, fragment data buffer, \textsc{lss}
 authentication pairs, packet statistics, bitset tracking received
 fragments, and pre-serialized request packets.
 
@@ -1110,7 +1113,7 @@ Arenas are freed only when their parent data structure is destroyed:
 deleted and its arena freed. This happens asynchronously through libuv's
 handle cleanup to ensure proper timer shutdown before freeing memory.
 
-\textbf{Authentication failure}: If LSS verification fails while
+\textbf{Authentication failure}: If \textsc{lss} verification fails while
 processing fragments, the entire request is immediately deleted.
 
 \textbf{Timeout expiration}: When retry timers exhaust their attempts,
@@ -1371,11 +1374,11 @@ fragment requesting. The protocol maintains a bitset tracking which
 fragments have been received. When requesting additional fragments
 during congestion-controlled transmission, the requester consults both
 the congestion window (how many new requests can be sent) and the bitset
-(which fragments are needed). This provides the benefits of \textsc{tcp} SACK
+(which fragments are needed). This provides the benefits of \textsc{tcp} \textsc{sack}
 without requiring additional protocol machinery---selectivity is
 inherent to the request/response model.
 
-When fragments arrive out of order, the LSS (Lockstep Signature Scheme)
+When fragments arrive out of order, the \textsc{lss} (Lockstep Signature Scheme)
 authentication requires buffering misordered packets until their Merkle
 proof predecessors arrive. Once authenticated, these fragments are
 marked received in the bitset, and the congestion control state updates
@@ -1447,10 +1450,10 @@ rather than cwnd = 1) - Packet-oriented rather than byte-oriented
 windows - Implicit acknowledgment via data receipt - Pull-based rather
 than push-based architecture - Per-peer rather than per-connection state
 
-Compared to NewReno/SACK: The protocol lacks fast retransmit and fast
+Compared to NewReno/\textsc{sack}: The protocol lacks fast retransmit and fast
 recovery, making it less responsive to isolated packet loss. However,
 the selective request architecture provides the functional benefits of
-SACK naturally. The implicit acknowledgment scheme eliminates issues
+\textsc{sack} naturally. The implicit acknowledgment scheme eliminates issues
 with ACK loss and compression that affect \textsc{tcp}.
 
 \subsection{Design Trade-offs}\label{design-trade-offs}
