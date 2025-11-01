@@ -212,7 +212,7 @@ be increased to any power of 2 kiB's up to 128MiB, for other
 environments, such as intra-datacenter). The protocol definition does
 not require those fragment requests to be sent in any particular order
 or according to any particular congestion control algorithm. The current
-implementation uses a packet-switched variant of the TCP NewReno
+implementation uses a packet-switched variant of the \textsc{tcp} NewReno
 congestion control algorithm, written in C in Urbit's runtime, to manage
 multi-packet reads. The message-level authentication is sent in the
 first response packet. Each subsequent packet is authenticated as being
@@ -1192,7 +1192,7 @@ restart -- a requesting ship can resume a download. In order to pick up
 from where it left off, the runtime first asks its local Arvo for the
 leaf-packet hashes it needs, which Arvo generates on demand from the
 jumbo frames that have already been downloaded and stored in Arvo. This
-is O(log(n)) hashes, where n is the message length, and no message data
+is $O(\log(n))$ hashes, where $n$ is the message length, and no message data
 needs to be sent over inter-process communication in order to resume a
 download, preventing restarts from becoming slow and memory-intensive.
 
@@ -1202,9 +1202,9 @@ jumbo frame after the last one that had been downloaded and saved in
 Arvo.
 
 Download checkpointing and resumption together provide a good set of
-tools for download management. This is beyond what TCP provides, or even
-HTTP. HTTP has resumption headers, but both client and server have to
-opt into using them, so in practice many HTTP-based downloads cannot be
+tools for download management. This is beyond what \textsc{tcp} provides, or even
+\textsc{http}. \textsc{http} has resumption headers, but both client and server have to
+opt into using them, so in practice many \textsc{http}-based downloads cannot be
 resumed.
 
 \section{Congestion Control}\label{congestion-control}
@@ -1235,15 +1235,15 @@ they must be retried indefinitely. Fast, runtime-based congestion
 control only kicks in when the runtime receives a response packet,
 indicating the publishing ship has become responsive.
 
-The current implementation of Directed Messaging employs a modified TCP
+The current implementation of Directed Messaging employs a modified \textsc{tcp}
 Tahoe-style congestion control algorithm adapted to its request/response
 architecture and packet-oriented nature. The protocol's congestion
-control differs from traditional TCP in several fundamental ways due to
+control differs from traditional \textsc{tcp} in several fundamental ways due to
 its pull-based communication model and implicit acknowledgment scheme.
 
 \subsection{Architectural Foundation}\label{architectural-foundation}
 
-Unlike TCP's push-based model where senders transmit data and await
+Unlike \textsc{tcp}'s push-based model where senders transmit data and await
 separate acknowledgment packets, Directed Messaging operates on a
 request/response paradigm. The requesting ship sends PEEK packets to
 solicit specific fragments, and the responding ship sends PAGE packets
@@ -1257,7 +1257,7 @@ The protocol operates on fixed-size fragments rather than byte streams.
 Each fragment contains up to 1024 bytes of payload data (at the default
 bloq parameter of 13). The congestion window (cwnd) measures capacity in
 fragment count rather than bytes, providing coarser but simpler
-granularity than TCP's byte-oriented approach.
+granularity than \textsc{tcp}'s byte-oriented approach.
 
 \subsection{State Variables}\label{state-variables}
 
@@ -1286,7 +1286,7 @@ fragments have been received using an efficient bitset representation.
 \subsection{Slow Start and Congestion
 Avoidance}\label{slow-start-and-congestion-avoidance}
 
-The protocol implements two growth phases analogous to TCP:
+The protocol implements two growth phases analogous to \textsc{tcp}:
 
 Slow Start Phase (\texttt{cwnd\ \textless{}\ ssthresh}): Upon initiating
 a request or recovering from congestion, cwnd begins at 1 fragment. For
@@ -1311,7 +1311,7 @@ Recovery}\label{loss-detection-and-recovery}
 
 Directed Messaging currently implements timeout-based loss detection
 only, without fast retransmit or fast recovery mechanisms. This places
-it closest to TCP Tahoe's behavior, though with an important
+it closest to \textsc{tcp} Tahoe's behavior, though with an important
 modification to timeout handling.
 
 Timeout Detection: Each in-flight fragment's transmission time is
@@ -1325,7 +1325,7 @@ reduces network load by: 1. Setting
 \texttt{ssthresh\ =\ max(1,\ cwnd\ /\ 2)} 2. Setting
 \texttt{cwnd\ =\ ssthresh} 3. Doubling rto (up to a maximum bound)
 
-This differs from TCP Tahoe, which sets cwnd = 1 and restarts slow start
+This differs from \textsc{tcp} Tahoe, which sets cwnd = 1 and restarts slow start
 from the beginning. Directed Messaging's approach is less conservative,
 immediately resuming transmission at the reduced threshold rather than
 slowly ramping up from a single packet. This assumes that while
@@ -1333,7 +1333,7 @@ congestion occurred, the network can still sustain traffic at half the
 previous rate without requiring a full slow start restart.
 
 The lack of fast retransmit (triggering on three duplicate
-acknowledgments) represents a significant difference from modern TCP
+acknowledgments) represents a significant difference from modern \textsc{tcp}
 variants. Fast retransmit requires detecting duplicate ACKs, which in
 Directed Messaging would mean detecting requests for the same fragment.
 However, the current implementation treats each arriving PAGE packet
@@ -1345,12 +1345,12 @@ future enhancement.
 Estimation}\label{round-trip-time-estimation}
 
 The protocol employs Jacobson/Karels RTT estimation, the same algorithm
-used in TCP. When a fragment acknowledgment arrives (excluding
+used in \textsc{tcp}. When a fragment acknowledgment arrives (excluding
 retransmissions), the round-trip time measurement (rtt\_datum) is
 calculated as the difference between current time and transmission time.
 
 RTT smoothing uses exponential weighted moving averages with traditional
-TCP parameters: -
+\textsc{tcp} parameters: -
 \texttt{rtt\ =\ (rtt\_datum\ +\ 7×rtt)\ /\ 8\ \ (α\ =\ 1/8)} -
 \texttt{rttvar\ =\ (\textbar{}rtt\_datum\ -\ rtt\textbar{}\ +\ 7×rttvar)\ /\ 8\ \ (β\ =\ 1/4)}
 
@@ -1371,7 +1371,7 @@ fragment requesting. The protocol maintains a bitset tracking which
 fragments have been received. When requesting additional fragments
 during congestion-controlled transmission, the requester consults both
 the congestion window (how many new requests can be sent) and the bitset
-(which fragments are needed). This provides the benefits of TCP SACK
+(which fragments are needed). This provides the benefits of \textsc{tcp} SACK
 without requiring additional protocol machinery---selectivity is
 inherent to the request/response model.
 
@@ -1432,10 +1432,10 @@ becomes stale. Future enhancements may include state expiration and
 re-initialization after prolonged idle periods, though the current
 implementation maintains state indefinitely once a peer is known.
 
-\subsection{Comparison with TCP
+\subsection{Comparison with \textsc{tcp}
 Variants}\label{comparison-with-tcp-variants}
 
-The congestion control algorithm most closely resembles TCP Tahoe but
+The congestion control algorithm most closely resembles \textsc{tcp} Tahoe but
 with notable differences:
 
 Similarities to Tahoe: - Slow start with exponential growth - Congestion
@@ -1451,13 +1451,13 @@ Compared to NewReno/SACK: The protocol lacks fast retransmit and fast
 recovery, making it less responsive to isolated packet loss. However,
 the selective request architecture provides the functional benefits of
 SACK naturally. The implicit acknowledgment scheme eliminates issues
-with ACK loss and compression that affect TCP.
+with ACK loss and compression that affect \textsc{tcp}.
 
 \subsection{Design Trade-offs}\label{design-trade-offs}
 
 The congestion control design reflects several architectural trade-offs:
 
-Advantages: - Simpler than modern TCP variants (no fast recovery
+Advantages: - Simpler than modern \textsc{tcp} variants (no fast recovery
 complexity) - Natural selective acknowledgment through request/response
 model - Requester controls rate, preventing receiver overwhelm - No
 separate ACK channel to fail - Precise retransmission control with
