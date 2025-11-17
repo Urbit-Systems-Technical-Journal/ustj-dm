@@ -1,6 +1,9 @@
 \documentclass[twoside]{article}
 
 \usepackage{ustj}
+\providecommand{\tightlist}{%
+\setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+\usepackage{fancyvrb}
 
 \addbibresource{mss.bib}
 
@@ -17,7 +20,7 @@
               Manuscript submitted for review.\\
               % {\it Urbit Systems Technical Journal} I:1 (2024):  1–3. \\
               ~ \\
-              Address author correspondence to \authorpatp.
+              Address author correspondence to \patp{rovnys-ricfer}.
               }}
 }
 %  Arrange subsequent pages:
@@ -38,20 +41,7 @@
 
 \begin{abstract}
 \sloppy
-% abstract of paper
-The Directed Messaging project was a fundamental overhaul of Urbit's
-networking stack. It rewrote the protocol definition and the protocol
-implementation, split between Hoon code inside Arvo (the Urbit overlay
-OS), and C code in Vere (the Urbit runtime). Directed Messaging
-addressed several major limitations of Urbit's previous networking
-stack: it increased throughput by over 100$\times$, improved peer discovery
-reliability, enabled the scalability of content delivery, and introduced
-a modular internal architecture that reduced implementation complexity.
-Directed Messaging is an encrypted, authenticated, peer-to-peer,
-connectionless, packet-switched, message-oriented, content-centric,
-transactional network protocol with its own congestion control,
-transmission control, and packet-level authentication. 
-It was begun under the auspices of the Urbit Foundation in 2023 and deployed to the Urbit network in early 2025.
+Directed Messaging is a redesign of Urbit's networking protocol achieving over 100× throughput improvements while implementing content-centric networking in a production peer-to-peer system. Unlike address-based routing, all network operations (queries and commands) are expressed as remote namespace reads. Urbit's immutable scry namespace enables efficient caching, deterministic encryption, and stateless publishing, while a pre-distributed \textsc{pki} eliminates handshake overhead for single-roundtrip transactions. Lockstep Streaming, a novel scale-invariant packet authentication scheme using binary numeral trees, maintains authentication integrity across variable \textsc{mtu} sizes at relay hops. The Lackman traversal pattern enables constant-space streaming authentication. \mbox{Directed} routing simplifies peer discovery and \textsc{nat} traversal compared to previous approaches, while source-independent routing minimizes relay state. Begun in 2023 under the auspices of the Urbit Foundation and \mbox{deployed} in early 2025, Directed Messaging represents the first large-scale deployment of content-centric networking.
 \end{abstract}
 
 % We will adjust page numbering in final editing.
@@ -60,387 +50,134 @@ It was begun under the auspices of the Urbit Foundation in 2023 and deployed to 
 
 \tableofcontents
 
-The Directed Messaging project was a fundamental overhaul of Urbit's
-networking stack. It rewrote the protocol definition and the protocol
-implementation, split between Hoon code inside Arvo (the Urbit overlay
-OS), and C code in Vere (the Urbit runtime). Directed Messaging
-addressed several major limitations of Urbit's previous networking
-stack: it increased throughput by over 100$\times$, improved peer discovery
-reliability, enabled the scalability of content delivery, and introduced
-a modular internal architecture that reduced implementation complexity.
-Directed Messaging is an encrypted, authenticated, peer-to-peer,
-connectionless, packet-switched, message-oriented, content-centric,
-transactional network protocol with its own congestion control,
-transmission control, and packet-level authentication. It was deployed
-to the Urbit network in early 2025.
+\section{Introduction}
 
-These improvements were driven by Directed Messaging's total adherence
-to a request-response discipline throughout the stack, bundled with
-heavy use of Urbit's immutable global namespace, called the ``scry
-namespace''. Every network message is either a request for data at a
-``scry path'' (Urbit's equivalent of a \textsc{url}), or an authenticated
-response that includes the data at that path. This is true at the
-message layer and the packet layer, and for both reads (queries) and
-writes (commands).
+The Directed Messaging project was a fundamental overhaul of Urbit's networking stack. It rewrote the protocol definition and the protocol implementation, split between Hoon code inside Arvo (the Urbit overlay OS), and C code in Vere (the Urbit runtime). Directed Messaging addressed several major limitations of Urbit's previous networking stack: it increased throughput by over 100$\times$, improved peer discovery reliability, enabled the scalability of content delivery, and introduced a modular internal architecture that reduced implementation complexity. Directed Messaging is an encrypted, authenticated, peer-to-peer, packet-switched, message-oriented, connectionless, content-centric, transactional network protocol with its own congestion control, transmission control, and packet-level authentication. It was deployed to the Urbit network in early 2025.
 
-Before Directed Messaging, the bandwidth Urbit was able to utilize was
-extremely limited, maxing out in the hundreds of kilobytes per second.
-It lacked orders of magnitude of performance in order to make effective
-use of commodity networking hardware, such as on a laptop or cloud
-instance. With Directed Messaging, Urbit's networking speed was able to
-reach over 1 gigabit/s on commodity hardware, sufficient for the vast
-majority of contemporary personal use cases.
+\sloppy
+These improvements were driven by Directed Messaging's total adherence to a request-response discipline throughout the stack, bundled with heavy use of Urbit's immutable referentially-transparent global namespace, called the ``scry namespace''. Every network message is either a request for data at a ``scry path'' (Urbit's equivalent of a \textsc{url}), or an authenticated response that includes the data at that path. This is true at the message layer and the packet layer, and for both reads (queries) and writes (commands).
 
-Directed Messaging managed to improve throughput while preserving
-Urbit's already-good latency performance. For small messages, a network
-transaction is accomplished in one roundtrip: a command sent one way,
-followed by an acknowledgment the other way. Due to Urbit's \textsc{pki} (public
-key infrastructure) being disseminated to all nodes \emph{a priori} from
-a Byzantine fault-tolerant source (the Ethereum blockchain and a bespoke
-L2 for economic efficiency), no cryptographic handshake is needed for
-two Urbit nodes (called ``ship''s in Urbit lingo) to begin communication
--- even their first exchange is a single roundtrip.
+Before Directed Messaging, the bandwidth Urbit was able to utilize was extremely limited, maxing out in the hundreds of kilobytes per second. It lacked orders of magnitude of performance in order to make effective use of commodity networking hardware, such as on a laptop or cloud instance. With Directed Messaging, Urbit's networking speed was able to reach over 1 gigabit/s on commodity hardware, sufficient for the vast majority of contemporary personal use cases.
 
-In addition to performance improvements, Directed Messaging scales better
-by leveraging runtime caching to disseminate data to many clients
-simultaneously. This strategy is particularly effective within Urbit's immutable
-scry namespace. Directed Messaging also introduces a new procedure for peer
-discovery and routing that is much more reliable and performant than the
-previous setups. It deals better with \textsc{nat} traversal and with using
-supernodes as relays more efficiently and reliably.
+Directed Messaging managed to improve throughput while preserving Urbit's already-good latency performance. For small messages, a network transaction is accomplished in one roundtrip: a command sent one way, followed by an acknowledgment the other way. Due to Urbit's public key infrastructure (\textsc{pki}) being disseminated to all nodes \emph{a priori} from a Byzantine fault-tolerant source (the Ethereum blockchain and a bespoke L2 for economic efficiency), no cryptographic handshake is needed for two Urbit nodes (called ``ship''s in Urbit lingo) to begin communication -- even their first exchange is a single roundtrip.
+
+In addition to performance improvements, Directed Messaging scales better by leveraging runtime caching to disseminate data to many clients simultaneously. This strategy is particularly effective within Urbit's immutable scry namespace. Directed Messaging also introduces a new procedure for peer discovery and routing that is much more reliable and performant than the previous setups. It deals better with \textsc{nat} traversal and with using supernodes as relays more efficiently and reliably.
 
 All of this is done by simplifying the basic networking structure to
 enforce a rigid request-response discipline throughout the entire
 system. In addition to that, it also places all network messages,
 including acknowledgments and commands, in addition to responses for
-queries asking for data, into Urbit's immutable namespace, called the
-scry namespace. This makes Urbit's entire networking stack a named data
-networking system, which is also called content-centric networking. As
-far as the authors know, Directed Messaging is the very first production
-deployment of a content-centric networking protocol, as well as the
-deployment with the largest number of nodes. Not only that, its
-content-centricity preserves the immutability of Urbit's namespace
-throughout the stack. The immutability is key to the scalability
-improvements and reliability improvements, and it also helps with
-single-threaded performance.
+queries asking for data, into Urbit's immutable namespace, called the scry namespace. This makes Urbit's entire networking stack a named data networking system, which is also called content-centric networking. As far as the authors know, Directed Messaging is the very first production deployment of a content-centric networking protocol, as well as the deployment with the largest number of nodes. Not only that, its content-centricity preserves the immutability of Urbit's namespace throughout the stack. The immutability is key to the scalability improvements and reliability improvements, and it also helps with single-threaded performance.
 
 \sloppy
-Along the way, we designed and implemented a novel scheme for streaming
-packet authentication. This helps prevent denial-of-service attacks that
-could forge individual packets and spoof them in order to invalidate a
-large download. This attack is prevented by authenticating every packet,
-but unlike the previous version of Urbit's networking stack, which
-authenticated each packet with a signature (meaning one signature for
-every kilobyte of data, which was extremely inefficient), there's only
-one signature per message. A Merkelization scheme using binary numeral
-trees (TODO: cite) is used to authenticate the packets within that message.
+Along the way, we designed and implemented a novel scheme for streaming packet authentication. This helps prevent denial-of-service attacks that could forge individual packets and spoof them in order to invalidate a large download. This attack is prevented by authenticating every packet, but unlike the previous version of Urbit's networking stack, which authenticated each packet with a signature (meaning one signature for every kilobyte of data, which was extremely inefficient), there's only one signature per message. A Merkelization scheme using binary numeral trees (TODO: cite) is used to authenticate the packets within that message.
 
-This achieves a property that, to our knowledge, has not been
-demonstrated in prior packet authentication schemes: the ability to
-handle a different maximum transmission unit (\textsc{mtu}) at each hop in a
-relay chain without losing packet-level authentication. It is a
-scale-invariant packet-authentication scheme, and it also has good
-memory use characteristics, due to a novel algorithm based on the
-``Lackman'' scale-invariant tree-traversal pattern developed by the
-authors. A relay receiving packets of one size and emitting packets of
-another size only needs to hold one large packet in memory while
-streaming (e.g.~if receiving 1kiB packets and sending 16kiB packets, it
-only needs to store 16kiB of packet data at a time). It can seamlessly
-handle any \textsc{mtu} that is one kilobyte, two kilobytes, or any power-of-two
-number of kilobytes above that, up to 128MiB.
+This achieves a property that, to our knowledge, has not been demonstrated in prior packet authentication schemes: the ability to handle a different maximum transmission unit (\textsc{mtu}) at each hop in a relay chain without losing packet-level authentication. It is a scale-invariant packet-authentication scheme, and it also has good memory use characteristics, due to a novel algorithm based on the ``Lackman'' scale-invariant tree-traversal pattern developed by the authors. A relay receiving packets of one size and emitting packets of another size only needs to hold one large packet in memory while streaming (e.\,g.\ if receiving 1 kiB packets and sending 16kiB packets, it only needs to store 16 kiB of packet data at a time). It can seamlessly handle any \textsc{mtu} that is one kilobyte, two kilobytes, or any power-of-two number of kilobytes above that, up to 128 MiB.
 
-Another advantage of the Directed Messaging protocol is that much more
-of the logic can be offloaded from the Urbit operating system, Arvo,
-into the runtime. This enables decoupling between the formal
-specification, which is written in Nock, and implementation, which is
-written in C. This is in keeping with the spirit of Urbit's ``jet''
-system that separates mechanism and policy for code execution. The most
-straightforward advantage of this decoupling is that each packet can be
-processed ephemerally, without incurring a disk write as in previous
-versions of Urbit's network protocol -- that was a severe bottleneck on
-the maximum throughput. The implementation in the runtime could be
-swapped out with another implementation written in another language, the
-congestion control algorithm could be swapped out, and parallelism
-strategies could readily be employed to increase multicore \textsc{cpu}
-utilization. The implementation that was deployed contains a major
-optimization: specialized arena allocators to reduce memory management
-overhead.
+Another advantage of the Directed Messaging protocol is that much more of the logic can be offloaded from the Urbit operating system, Arvo, into the runtime. This enables decoupling between the formal
+specification, which is written in Nock, and implementation, which is written in C. This is in keeping with the spirit of Urbit's ``jet'' system that separates mechanism and policy for code execution. The most straightforward advantage of this decoupling is that each packet can be processed ephemerally, without incurring a disk write as in previous versions of Urbit's network protocol -- that was a severe bottleneck on the maximum throughput. The implementation in the runtime could be swapped out with another implementation written in another language, the congestion control algorithm could be swapped out, and parallelism strategies could readily be employed to increase multicore \textsc{cpu} utilization. The implementation that was deployed contains a major optimization: specialized arena allocators to reduce memory management overhead.
 
-\section{High-Level Protocol Design}\label{high-level-protocol-design}
+\section{High-Level Protocol Design}
+\label{high-level-protocol-design}
 
-% Request/Response, Namespace Reads
-The protocol design is based off the idea of a remote namespace read,
-wherein a ``subscriber'' ship requests data from a ``publisher'' ship,
-and the publisher sends that data as the response. The publisher ship
-makes the data available over the network by assigning it a path in
-Urbit's ``scry'' namespace and setting permissions appropriately
-(permissioning will be described fully in a later section). The
-subscriber ship, then, can download data from another ship by sending it
-a request for the data at a path and waiting for the response.
+\subsection{Request/Response, Namespace Reads}
+
+The protocol design is based off the idea of a remote namespace read, wherein a ``subscriber'' ship requests data from a ``publisher'' ship, and the publisher sends that data as the response. The publisher ship makes the data available over the network by assigning it a path in Urbit's ``scry'' namespace and setting permissions appropriately (permissioning will be described fully in a later section). The subscriber ship, then, can download data from another ship by sending it a request for the data at a path and waiting for the response.
 
 \sloppy
-A network roundtrip is conceived of as a request, followed by a
-response. The request consists of a ``scry request'', i.e.~a request for
-data at a ``scry path''. An example scry path is
-\texttt{/\textasciitilde{}zod/1/2/c/x/\textasciitilde{}2025.9.22/sys/kelvin}.
-A scry path immutably names a datum, in this case the
-\texttt{sys.kelvin} file published by \texttt{\textasciitilde{}zod} (at
-\texttt{rift=1} and \texttt{life=2}), within the \texttt{\%c} kernel
-module (Clay, the revision control system), with request type
-\texttt{\%x} (request file contents), and with timestamp at the start of
-the day on September 22, 2025. When a ship receives a scry request over
-the network, it can respond by sending a ``scry response'' containing
-the datum bound to that path.
+A network roundtrip is conceived of as a request, followed by a response. The request consists of a ``scry request'', i.\,e.\ a request for data at a ``scry path''. An example scry path is  \lstinline[style=inlinecode]{/~zod/1/2/c/x/~2025.9.22/sys/kelvin}. A scry path immutably names a datum, in this case the \texttt{sys.kelvin} file published by \texttt{\textasciitilde{}zod} (at \texttt{rift=1} and \texttt{life=2}), within the \texttt{\%c} kernel module (Clay, the revision control system), with request type \texttt{\%x} (request file contents), and with timestamp at the start of the day on September 22, 2025. When a ship receives a scry request over the network, it can respond by sending a ``scry response'' containing the datum bound to that path.
 
-Over the network, a network request is a single \textsc{udp} packet that encodes
-a scry path, limited to 384 characters so the request packet always fits
-into the internet-standard 1500-byte \textsc{mtu} (maximum transmission unit). A
-scry response may consist of a single packet, or multiple packets,
-depending on the size of the datum bound to that path. If the datum is
-1kiB or less, the response is encoded into a single \textsc{udp} packet.
-Otherwise, the first scry response packet contains only the first 1kiB
-of the datum, along with a fixed-width field containing the number of
-bits in the whole datum.
+Over the network, a network request is a single \textsc{udp} packet that encodes a scry path, limited to 384 characters so the request packet always fits into the internet-standard 1500-byte \textsc{mtu} (maximum transmission unit). A scry response may consist of a single packet, or multiple packets, depending on the size of the datum bound to that path. If the datum is 1kiB or less, the response is encoded into a single \textsc{udp} packet. Otherwise, the first scry response packet contains only the first 1kiB of the datum, along with a fixed-width field containing the number of bits in the whole datum.
 
-If the subscriber ship receives a response indicating the datum is
-multi-packet, it switches modes and begins requesting the remainder of
-the datum, one kiB at a time. Each request for a kiB of data is itself a
-fully-fledged namespace read request, where the path in the request
-contains the path of the whole datum as well as the chunk size being
-requested (configured to 1kiB over the public internet, but this could
-be increased to any power of 2 kiB's up to 128MiB, for other
-environments, such as intra-datacenter). The protocol definition does
-not require those fragment requests to be sent in any particular order
-or according to any particular congestion control algorithm. The current
-implementation uses a packet-switched variant of the \textsc{tcp} NewReno
-congestion control algorithm, written in C in Urbit's runtime, to manage
-multi-packet reads. The message-level authentication is sent in the
-first response packet. Each subsequent packet is authenticated as being
-part of that message by using the LockStep streaming authentication
-scheme, described in a later section.
+If the subscriber ship receives a response indicating the datum is multi-packet, it switches modes and begins requesting the remainder of the datum, one kiB at a time. Each request for a kiB of data is itself a fully-fledged namespace read request, where the path in the request contains the path of the whole datum as well as the chunk size being requested (configured to 1 kiB over the public internet, but this could be increased to any power of 2 kiB's up to 128 MiB, for other environments, such as intra-datacenter). The protocol definition does not require those fragment requests to be sent in any particular order or according to any particular congestion control algorithm. The current implementation uses a packet-switched variant of the \textsc{tcp} NewReno congestion control algorithm, written in C in Urbit's runtime, to manage multi-packet reads. The message-level authentication is sent in the first response packet. Each subsequent packet is authenticated as being part of that message by using the LockStep streaming authentication scheme, described in a later section.
 
-This remote read flow is a ``pure read'': handling a read request does
-not require the publisher ship to change any persistent state. But a
-general-purpose network protocol needs to be able to express commands,
-not just reads. Directed Messaging builds commands out of reads. A
-command is conceived of as two reads, one in each direction:
+This remote read flow is a ``pure read'': handling a read request does not require the publisher ship to change any persistent state. But a general-purpose network protocol needs to be able to express commands, not just reads. Directed Messaging builds commands out of reads. A command is conceived of as two reads, one in each direction:
 
 \begin{enumerate}
-\def\labelenumi{\arabic{enumi}.}
-\tightlist
-\item
-  The ship sending the command makes the command datum available within
-  its own scry namespace, so the receiving ship has the ability to read
-  the command by sending a remote read request.
-\item
-  The ship that receives the command, after attempting to execute the
-  command, makes the command's result available within its namespace, so
-  the sending ship has the ability to read the result (hereafter called
-  the ``ack'') by sending a remote read request. A result can be success
-  (``ack'') or an error datum (``naxplanation'', named after ``nack''
-  for negative acknowledgment).
+% \def\labelenumi{\arabic{enumi}.}
+% \tightlist
+\item  The ship sending the command makes the command datum available within its own scry namespace, so the receiving ship has the ability to read the command by sending a remote read request.
+\item  The ship that receives the command, after attempting to execute the command, makes the command's result available within its namespace, so the sending ship has the ability to read the result (hereafter called the ``ack'') by sending a remote read request. A result can be success (``ack'') or an error datum (``naxplanation'', named after ``nack'' for negative acknowledgment).
 \end{enumerate}
 
-This approach is conceptually clean but immediately presents two
-practical challenges. The first is triggering: how does the receiving
-ship \emph{know} to request the command datum from the sending ship?
-There are many ships on the network; it would be absurdly impractical to
-send requests to all of them on the off-chance that one or two of them
-have an outstanding command for us. The second challenge is latency: a
-naive implementation would imply every command requires two network
-roundtrips, one to remote-read the command and one to remote-read the
-command's result (ack or naxplanation). If so, that would be
-unfortunate, since Urbit's previous networking required only one
-roundtrip for a command and ack, in the common case of a small
-(\textless= 1kiB) command datum, and unneeded roundtrips are anathema to
-a good user experience. See
-\href{https://www.stuartcheshire.org/rants/latency.html}{It's the
-Latency, Stupid (1996)}.
+This approach is conceptually clean but immediately presents two practical challenges. The first is triggering: how does the receiving ship \emph{know} to request the command datum from the sending ship? There are many ships on the network; it would be absurdly impractical to send requests to all of them on the off-chance that one or two of them have an outstanding command for us. The second challenge is latency: a naive implementation would imply every command requires two network roundtrips, one to remote-read the command and one to remote-read the command's result (ack or naxplanation). If so, that would be unfortunate, since Urbit's previous networking required only one roundtrip for a command and ack, in the common case of a small (≤ 1 kiB) command datum, and unneeded roundtrips are anathema to
+a good user experience \citep{Cheshire1996}.
 
-Fortunately, we can solve both problems with one weird trick. We add a
-`request-type' bit to each network request packet indicating whether it
-is a read or a command, and if it is a command, it includes not only the
-scry request path, but also a scry response containing the first 1kiB of
-the command datum. When the receiving ship's runtime receives the
-packet, it looks at the `request-type' bit to determine how to handle
-the packet.
+Fortunately, we can solve both problems with one weird trick. We add a `request-type' bit to each network request packet indicating whether it is a read or a command, and if it is a command, it includes not only the scry request path, but also a scry response containing the first 1 kiB of the command datum. When the receiving ship's runtime receives the packet, it looks at the `request-type' bit to determine how to handle the packet.
 
-If the incoming request packet is a read, the runtime performs a read
-request on the Arvo OS by firing its \texttt{+peek} arm, a Nock function
-that reads from Arvo's namespace. This read request does not trigger any
-disk writes and could be run in parallel with other reads and with an
-Arvo event. The runtime then encodes the result of this read as a scry
-response packet and sends it back to the IP and port that sent the
-request.
+If the incoming request packet is a read, the runtime performs a read request on the Arvo OS by firing its \lstinline[style=inlinecode]{+peek} arm, a Nock function that reads from Arvo's namespace. This read request does not trigger any disk writes and could be run in parallel with other reads and with an Arvo event. The runtime then encodes the result of this read as a scry response packet and sends it back to the IP and port that sent the request.
 
-If the packet is a command, the runtime injects the packet as a stateful
-Arvo ``event'' by firing its \texttt{+poke} arm (a Nock function that
-sends an event or command for Arvo to process, producing effects and a
-new Arvo OS with a modified state). When this event completes, one of
-the effects it produces can be a scry response packet containing the
-ack, which the runtime will send back to the IP and port that sent the
-request.
+If the packet is a command, the runtime injects the packet as a stateful Arvo ``event'' by firing its \lstinline[style=inlinecode]{+poke} arm (a Nock function that sends an event or command for Arvo to process, producing effects and a new Arvo OS with a modified state). When this event completes, one of the effects it produces can be a scry response packet containing the ack, which the runtime will send back to the IP and port that sent the request.
 
-If the command datum fits within 1kiB, the entire command is sent in the
-first packet, recapturing the single-roundtrip flow for a command and
-and ack. Multi-packet commands are downloaded by the commanded ship
-using the same congestion control as downloading any other potentially
-large datum -- and, importantly, those incremental downloads do not
-necessarily trigger unnecessarily frequent disk writes.
+If the command datum fits within 1 kiB, the entire command is sent in the first packet, recapturing the single-roundtrip flow for a command and an ack. Multi-packet commands are downloaded by the commanded ship using the same congestion control as downloading any other potentially large datum -- and, importantly, those incremental downloads do not necessarily trigger unnecessarily frequent disk writes.
 
-\section{Routing}\label{routing}
+\section{Routing}
+\label{routing}
 
-\subsection{Directed Routing}\label{directed-routing}
+\subsection{Directed Routing}
+\label{directed-routing}
 
-The Directed Messaging gets its name from its routing scheme, which
-treats each bidirectional communication between two Urbit ships as
-directed, like a directed edge in a graph. For each request/response
-roundtrip, one ship is the requester, and the other is the responder,
-and that distinction is known at every layer of the system. Making this
-directionality known to routing enables a routing paradigm where a
-response packet traces the exact same relay path through the network as
-the request path, in the reverse order. Previous Urbit networking
-protocols used the opposite paradigm: ``criss-cross routing'', so-called
-because both request and response could be routed through the
-destination ship's ``sponsor'', i.e.~the supernode ship (``galaxy'' root
-node or ``star'' infrastructure node) responsible for relaying packets
-to that ship. In contrast, in directed routing, the request and the
-response both use the same relay: the responder ship's sponsor.
+The Directed Messaging protocol gets its name from its routing scheme, which treats each bidirectional communication between two Urbit ships as directed, like a directed edge in a graph. For each request/response roundtrip, one ship is the requester, and the other is the responder, and that distinction is known at every layer of the system. Making this directionality known to routing enables a routing paradigm where a response packet traces the exact same relay path through the network as the request path, in the reverse order. Previous Urbit networking protocols used the opposite paradigm: ``criss-cross routing'', so-called because both request and response could be routed through the destination ship's ``sponsor'', i.\,e.\ the supernode ship (``galaxy'' root node or ``star'' infrastructure node) responsible for relaying packets to that ship. In contrast, in directed routing, the request and the response both use the same relay: the responder ship's sponsor.
 
 \subsubsection{Request (Same for both Directed and Criss-Cross
 Routing)}\label{request-same-for-both-directed-and-criss-cross-routing}
 
-\begin{verbatim}
+\begin{lstlisting}[style=listingblock]
 requester's sponsor       -------- responder's sponsor
                          /             \
 requester  ------------                 ---> responder
-\end{verbatim}
+\end{lstlisting}
 
 \subsubsection{Response (Directed Routing)}\label{response-directed-routing}
 
-\begin{verbatim}
+\begin{lstlisting}[style=listingblock]
 requester's sponsor       -------- responder's sponsor
                          /             \
 requester  <-----------                 ---- responder
-\end{verbatim}
+\end{lstlisting}
 
 \subsubsection{Response (Criss-Cross
 Routing)}\label{response-criss-cross-routing}
 
-\begin{verbatim}
+\begin{lstlisting}[style=listingblock]
 requester's sponsor -----          responder's sponsor
                 /          \
 requester <---              ---------------  responder
-\end{verbatim}
+\end{lstlisting}
 
 \subsection{Relaying}\label{relaying}
 
-Making the directedness of communication legible to relays and Urbit
-runtimes allows the protocol to be a faithful, if Urbit-specific, Named
-Data Networking (\textsc{ndn}) protocol, which had been Urbit's stated goal since
-2010. A Directed Messaging request packet acts as an \textsc{ndn} ``interest''
-packet, and a response packet acts as an \textsc{ndn} ``data'' packet.
+Making the directedness of communication legible to relays and Urbit runtimes allows the protocol to be a faithful, if Urbit-specific, Named Data Networking (\textsc{ndn}) protocol, which had been Urbit's stated goal since 2010. A Directed Messaging request packet acts as an \textsc{ndn} ``interest'' packet, and a response packet acts as an \textsc{ndn} ``data'' packet.
 
-The \textsc{ndn} family of protocols, created by Van Jacobson~et~al. in the
-mid-2000s, differs from traditional networking protocols in that an
-interest packet has no sender address field -- the identity of the
-sender of a request is unknown to the network. Instead, a receiver
-(relay or server) remembers ``where'' it heard the request from, and
-sends the response back to that. The notion of ``where'' varies
-depending on the layer of the stack the system is operating at: for an
-IP replacement, a relay would remember the physical interface
-(e.g.~Ethernet port) on which it heard the incoming request. When
-building on top of IP and \textsc{udp}, as Directed Messaging does, a receiver
-remembers the IP and port of the sender.
+The \textsc{ndn} family of protocols, created by Van Jacobson~et~al. in the mid-2000s, differs from traditional networking protocols in that an interest packet has no sender address field -- the identity of the sender of a request is unknown to the network. Instead, a receiver (relay or server) remembers ``where'' it heard the request from, and sends the response back to that. The notion of ``where'' varies depending on the layer of the stack the system is operating at: for an IP replacement, a relay would remember the physical interface (e.\,g.\ Ethernet port) on which it heard the incoming request. When building on top of IP and \textsc{udp}, as Directed Messaging does, a receiver remembers the IP and port of the sender.
 
-Previous Urbit network protocols still included the sender's Urbit
-identity in the request packets, failing to achieve the ``source
-independence'' property that defines \textsc{ndn}. Directed Messaging is
-completely source-independent for reads, and for commands, it piggybacks
-a source-independent response onto a source-independent request in such
-a way that the receiver does know which Urbit address sent the request,
-but not in a way that requires packet routing to know or use the source
-Urbit address.
+Previous Urbit network protocols still included the sender's Urbit identity in the request packets, failing to achieve the ``source independence'' property that defines \textsc{ndn}. Directed Messaging is completely source-independent for reads, and for commands, it piggybacks a source-independent response onto a source-independent request in such a way that the receiver does know which Urbit address sent the request, but not in a way that requires packet routing to know or use the source Urbit address.
 
-Source independence lets the routing operate fully locally, i.e.~without
-reference to or knowledge of anything beyond a single hop away in either
-direction. This minimizes the data storage and synchronization
-requirements for nodes, which could become significant at scale.
+Source independence lets the routing operate fully locally, i.\,e.\ without reference to or knowledge of anything beyond a single hop away in either direction. This minimizes the data storage and synchronization requirements for nodes, which could become significant at scale.
 
-Source independence entails stateful routing. Directed Messaging adopts
-\textsc{ndn}'s Pending Interest Table, which stores a mapping from each
-outstanding request to the IP and port that sent that request. If the
-request times out (after roughly 30 seconds), or the request is
-satisfied by a response, the request is deleted from the table.
+Source independence entails stateful routing. Directed Messaging adopts \textsc{ndn}'s Pending Interest Table, which stores a mapping from each outstanding request to the IP and port that sent that request. If the request times out (after roughly 30 seconds), or the request is satisfied by a response, the request is deleted from the table.
 
-Since responses are authenticated down to the packet level, and
-immutable (meaning no cache invalidation is ever needed, only eviction),
-it should be straightforward for relays to cache responses, enabling
-efficient content distribution through the network. At present, each
-Urbit ship's runtime has a cache for its own responses, but supernodes
-(galaxies and stars) do not yet cache responses from their sponsored
-ships.
+Since responses are authenticated down to the packet level, and immutable (meaning no cache invalidation is ever needed, only eviction), it should be straightforward for relays to cache responses, enabling efficient content distribution through the network. At present, each Urbit ship's runtime has a cache for its own responses, but supernodes (galaxies and stars) do not yet cache responses from their sponsored ships.
 
 \subsection{Peer Discovery}\label{peer-discovery}
 
-Urbit is a peer-to-peer network. Only root nodes (galaxies) list their
-own IP addresses publicly (on the Ethereum blockchain); all other ships
-must be discovered on demand. When one ship first sends a request to
-another ship, it generally doesn't know at what IP and port that ship
-could be reached, and it also doesn't know if the ship is reachable
-directly, or behind a firewall and only reachable through its sponsor.
+Urbit is a peer-to-peer network. Only root nodes (galaxies) list their own IP addresses publicly (on the Ethereum blockchain); all other ships must be discovered on demand. When one ship first sends a request to another ship, it generally doesn't know at what IP and port that ship could be reached, and it also doesn't know if the ship is reachable directly, or behind a firewall and only reachable through its sponsor.
 
-The criss-cross routing used in previous Urbit protocols was hard to
-work with in practice and suffered from inefficiencies and bugs.
-Directed Messaging has a simpler approach to peer discovery that is
-easier to reason about.
+The criss-cross routing used in previous Urbit protocols was hard to work with in practice and suffered from inefficiencies and bugs. Directed Messaging has a simpler approach to peer discovery that is easier to reason about.
 
-The main difficulties with criss-cross routing stem from the structure
-of the internet. Most residential internet connections live behind a
-firewall that blocks all unsolicited incoming \textsc{udp} packets. A laptop at
-home can send an outgoing packet to some destination IP and port, and
-the router will relay response packets back to the laptop for some time
-afterward, usually 30 seconds, as long as those response packets come
-from that same destination IP and port.
+The main difficulties with criss-cross routing stem from the  structure of the internet. Most residential internet connections live behind a firewall that blocks all unsolicited incoming \textsc{udp} packets. A laptop at home can send an outgoing packet to some destination IP and port, and the router will relay response packets back to the laptop for some time afterward, usually 30 seconds, as long as those response packets come from that same destination IP and port.
 
-A \textsc{udp}-based peer-to-peer network, then, needs to include not only
-residential nodes but also nodes on the public internet, not behind
-firewalls. These nodes must be discoverable so that residential nodes
-can ping them every 25 seconds, to ensure the residential nodes can
-receive messages. In Urbit, these public nodes are the galaxies (root
-nodes) and stars (infrastructure nodes). For now, only galaxies perform
-routing, due to edge cases with two levels of supernodes in peer
-discovery using criss-cross routing -- we expect Directed Messaging will
-unblock stars from participating in routing.
+A \textsc{udp}-based peer-to-peer network, then, needs to include not only residential nodes but also nodes on the public internet, not behind firewalls. These nodes must be discoverable so that residential nodes can ping them every 25 seconds, to ensure the residential nodes can receive messages. In Urbit, these public nodes are the galaxies (root nodes) and stars (infrastructure nodes). For now, only galaxies perform routing, due to edge cases with two levels of supernodes in peer discovery using criss-cross routing -- we expect Directed Messaging will unblock stars from participating in routing.
 
-When communicating with another ship for the first time, a ship first
-sends the packet to the other ship's sponsoring galaxy, which has an
-open connection to its sponsored ship if it's online. The galaxy
-receives a ping every 25 seconds from its sponsored ship. Whenever the
-source IP and port change, the galaxy's runtime injects an Arvo event
-and its Arvo OS saves the sponsored ship's new location to disk.
+When communicating with another ship for the first time, a ship first sends the packet to the other ship's sponsoring galaxy, which has an open connection to its sponsored ship if it's online. The galaxy receives a ping every 25 seconds from its sponsored ship. Whenever the source IP and port change, the galaxy's runtime injects an Arvo event and its Arvo OS saves the sponsored ship's new location to disk.
 
-In Directed Messaging, when the galaxy receives a packet intended for
-one of its sponsored ships, it relays the packet. This uses the pending
-interest table described above to track the fact that there is an
-outstanding request that the galaxy is expecting to be honored by a
-response from the sponsored ship. The fundamental invariant of directed
-routing is that the response packet must trace the exact same path
-through the network as the request packet had, just reversed. Since this
-request had gone through this galaxy, the response must also route
-through the galaxy.
+In Directed Messaging, when the galaxy receives a packet intended for one of its sponsored ships, it relays the packet. This uses the pending interest table described above to track the fact that there is an outstanding request that the galaxy is expecting to be honored by a response from the sponsored ship. The fundamental invariant of directed routing is that the response packet must trace the exact same path through the network as the request packet had, just reversed. Since this request had gone through this galaxy, the response must also route through the galaxy.
 
 \sloppy
-In Urbit's previous protocols, in contrast, the response would go
-directly from the sponsored ship back to the requesting ship, and also
-potentially through the requesting ship's sponsoring galaxy. This works
-in principle, but one drawback has to do with ``route tightening''
-(described below): the response route only tightens to a direct route
-(without relays) if there are requests flowing in both directions;
-otherwise every response will flow through the requester's sponsor, even
-if the requester is not behind a firewall.
+In Urbit's previous protocols, in contrast, the response would go directly from the sponsored ship back to the requesting ship, and also potentially through the requesting ship's sponsoring galaxy. This works in principle, but one drawback has to do with ``route tightening'' (described below): the response route only tightens to a direct route (without relays) if there are requests flowing in both directions; otherwise every response will flow through the requester's sponsor, even if the requester is not behind a firewall.
 
-\subsection{Route Tightening}\label{route-tightening}
+\subsection{Route Tightening}
+\label{route-tightening}
 
 It is better for performance, scaling, and individual sovereignty to
 obtain a direct route to another ship, rather than communicating through
@@ -607,7 +344,7 @@ Details}\label{message-authentication-and-encryption-details}
 \subsubsection{Overlay Namespaces}\label{overlay-namespaces}
 
 Each of the three privacy modes has its own ``overlay namespace'',
-i.e.~a part of the scry namespace that somehow transforms values bound
+i.\,e.\ a part of the scry namespace that somehow transforms values bound
 to a different part of the namespace. A path in an overlay namespace
 often consists of a path prefix containing the name of the overlay and
 any parameters needed for the transformation it performs on the datum at
@@ -625,7 +362,7 @@ Arvo state.
 
 Directed Messaging uses overlay namespaces not only for privacy modes,
 but also to publish individual packets within a message. The packet's
-size (expressed as the log base 2 kiB, e.g.~3 for 8kiB or 4 for 15kiB)
+size (expressed as the log base 2 kiB, e.\,g.\ 3 for 8kiB or 4 for 15kiB)
 and fragment number (index within the message) are parameters to this
 overlay, which overlays the message's scry path.
 
@@ -900,107 +637,58 @@ more diagrams, clearer explanation of Lackman traversal
 
 One of the goals of Directed Messaging was to improve upon the
 safe-but-dumb ``sign every 1 KiB packet'' design of old \texttt{\%ames}.
-The standard approach is to use asymmetric crypto to establish a shared
-AEAD key, and use it to authenticate each packet. This is just as safe
-as signing every packet, and orders of magnitude faster. However, we
-still can't verify that a peer is sending us \emph{correct} data until
-we've received the entire message. They could send us 999 good packets
-and 1 bad one, and we'd have no way of knowing which was which. This is
-especially annoying if we want to download in parallel from multiple
-peers: if the final result is invalid, which peer is to blame? If we
-want to solve this problem, we need to get a little custom.
+The standard approach is to use asymmetric crypto to establish a shared \textsc{aead} key, and use it to authenticate each packet. This is just as safe as signing every packet, and orders of magnitude faster. However, we still can't verify that a peer is sending us \emph{correct} data until we've received the entire message. They could send us 999 good packets and 1 bad one, and we'd have no way of knowing which was which. This is especially annoying if we want to download in parallel from multiple peers: if the final result is invalid, which peer is to blame? If we want to solve this problem, we need to get a little more bespoke.
 
-Verifying that a packet belongs to a particular message is a job for a
-Merkle tree. So our protocol needs to split message data into the leaves
-of a tree, and send both leaf data and tree hashes. Early on, we debated
-whether to make these distinct request types; we settled on interleaving
-them. Now the question becomes: which tree hashes do you need to send,
-and when do you send them?
+Verifying that a packet belongs to a particular message is a job for a Merkle tree. So our protocol needs to split message data into the leaves of a tree, and send both leaf data and tree hashes. Early on, we debated whether to make these distinct request types; we settled on interleaving them. Now the question becomes: which tree hashes do you need to send, and when do you send them?
 
 Our relevant design constraints were as follows:
 
 \begin{itemize}
-\tightlist
-\item
-  Sufficiently-small messages should not require more than one packet.
-\item
-  It should be possible to download in parallel.
-\item
-  The protocol should be flexible with respect to the size of a leaf.
+\item  Sufficiently-small messages should not require more than one packet.
+\item  It should be possible to download in parallel.
+\item  The protocol should be flexible with respect to the size of a leaf.
 \end{itemize}
 
-An obvious first place to look for inspiration was
-\href{https://github.com/oconnor663/bao}{Bao}. However, Bao is not very
-amenable to being split into fixed-size packets: it intermingles leaf
-data and tree hashes into one stream, and the number of consecutive
-hashes varies based on the offset. You could modify it such that each
-packet consists of a leaf followed by at most one hash; indeed, this was
-the initial plan. Visually:
+An obvious first place to look for inspiration was \href{https://github.com/oconnor663/bao}{Bao}. However, Bao is not very amenable to being split into fixed-size packets: it intermingles leaf data and tree hashes into one stream, and the number of consecutive hashes varies based on the offset. You could modify it such that each packet consists of a leaf followed by at most one hash; indeed, this was the initial plan. Visually:
 
-\begin{verbatim}
+\begin{Verbatim}[formatcom=\ttfamily, fontsize=\small]
                        ┌──────────────┴─────────────a
            ┌───────────┴───────────b              ┌─┴─q
      ┌─────┴─────c           ┌─────┴─────j        │   │
   ┌──┴──d     ┌──┴──g     ┌──┴──k     ┌──┴──n     │   │
 ┌─┴─e ┌─┴─f ┌─┴─h ┌─┴─i ┌─┴─l ┌─┴─m ┌─┴─o ┌─┴─p ┌─┴─r │
 0   1 2   3 4   5 6   7 8   9 10 11 12 13 14 15 16 17 18
-\end{verbatim}
+\end{Verbatim}
 
-This is a \href{https://eprint.iacr.org/2021/038}{binary numeral tree}:
-a structure composed of perfect binary trees, imposed upon a flat
-sequence of bytes. The numbers 0-18 represent leaf data (typically 1 KiB
-per leaf), while letters \emph{a}-\emph{r} represents tree hashes that
-are used to verify the leaves. So packet 3 would contain bytes 3072--4096
-and leaf hash \emph{d}.
+This is a \href{https://eprint.iacr.org/2021/038}{binary numeral tree}: a structure composed of perfect binary trees, imposed upon a flat sequence of bytes. The numbers 0-18 represent leaf data (typically 1 KiB per leaf), while letters \emph{a}-\emph{r} represents tree hashes that are used to verify the leaves. So packet 3 would contain bytes 3072--4096 and leaf hash \emph{d}.
 
-The main problem with this approach is that it requires buffering. In
-order to verify leaf 0, we need hashes \emph{a} through \emph{e} -- five
-packets! Worse, once we've received five packets, we have the whole
-\texttt{{[}0,4)} subtree, making hashes \emph{d} and \emph{e} redundant.
-(In BNTs, we use the notation \texttt{{[}n,m)} to refer to the perfect
-subtree containing leaves \texttt{n} through \texttt{m-1}.)
+The main problem with this approach is that it requires buffering. In order to verify leaf 0, we need hashes \emph{a} through \emph{e} -- five packets! Worse, once we've received five packets, we have the whole \texttt{{[}0,4)} subtree, making hashes \emph{d} and \emph{e} redundant. (In \textsc{bnt}s, we use the notation \texttt{{[}n,m)} to refer to the perfect subtree containing leaves \texttt{n} through \texttt{m-1}.)
 
-Buffering a few packets is not the end of the world, but the whole thing
-had kind of a bad smell to it. We asked: what would happen if we added
-another constraint?
+Buffering a few packets is not the end of the world, but the whole thing had kind of a bad smell to it. We asked: what would happen if we added another constraint?
 
 \begin{itemize}
-\tightlist
-\item
-  It should be possible to validate each packet as soon as it arrives,
-  with no buffering.
+\item  It should be possible to validate each packet as soon as it arrives, with no buffering.
 \end{itemize}
 
-For starters, an inescapable consequence of this constraint is that we
-must send the \emph{full} Merkle proof for the first leaf before we can
-send the leaf data itself. Also, we can no longer send hashes that can't
-be immediately verified. For example, to verify \emph{g}, we first need
-to have verified \emph{c}; we can then combine \emph{g} with its sibling
-hash and confirm that the result matches \emph{c}.
+For starters, an inescapable consequence of this constraint is that we must send the \emph{full} Merkle proof for the first leaf before we can send the leaf data itself. Also, we can no longer send hashes that can't be immediately verified. For example, to verify \emph{g}, we first need to have verified \emph{c}; we can then combine \emph{g} with its sibling hash and confirm that the result matches \emph{c}.
 
 While adding another constraint seems like it would make our life
 harder, in reality the opposite happened: the protocol was greatly
-simplified. It turns out that by front-loading the initial proof hashes,
-we ensure that the received leaf data and hashes will never ``run
-ahead'' of what can be immediately verified. Here's what it looks like
-in practice:
+simplified. It turns out that by front-loading the initial proof hashes, we ensure that the received leaf data and hashes will never ``run
+ahead'' of what can be immediately verified. Here's what it looks like in practice:
 
-\begin{verbatim}
+\begin{Verbatim}[formatcom=\ttfamily, fontsize=\small]
                        ┌──────────────┴─────────────*
            ┌───────────┴───────────*              l─┴─l
      ┌─────┴─────*           e─────┴─────e        │   │
   ┌──┴──*     b──┴──b     f──┴──f     i──┴──i     │   │
 *─┴─* a─┴─a c─┴─c d─┴─d g─┴─g h─┴─h j─┴─j k─┴─k m─┴─m │
 0   1 2   3 4   5 6   7 8   9 10 11 12 13 14 15 16 17 18
-\end{verbatim}
+\end{Verbatim}
 
-In the initial packet, we send the Merkle proof for leaf 0, i.e.~all of
-the hashes marked with \texttt{*}. Each subsequent packet contains leaf
-data (leaf 0, 1, 2, etc.), and possibly a ``pair'' (\emph{a}, \emph{b},
-\emph{c}, etc.), which comprises \emph{both} child hashes under a
-particular node. Packet-by-packet, the verifier sees:
+In the initial packet, we send the Merkle proof for leaf 0, i.\,e.\ all of the hashes marked with \texttt{*}. Each subsequent packet contains leaf data (leaf 0, 1, 2, etc.), and possibly a ``pair'' (\emph{a}, \emph{b}, \emph{c}, etc.), which comprises \emph{both} child hashes under a particular node. Packet-by-packet, the verifier sees:
 
-\begin{verbatim}
+\begin{lstlisting}[style=listingblock]
 Packet 0: Signed Merkle root + Merkle proof for leaf 0.
           Verify proof against signed root.
           We now have [0,1), [1,2), [2,4), [4,8), [8,16), and [16,19).
@@ -1017,7 +705,7 @@ Packet 3: Leaf 2 + Pair c.
           Verify pair c against [4,6).
           We now have [3,4), [4,5), [5,6), [6,8), [8,16), and [16,19).
 ... and so on.
-\end{verbatim}
+\end{lstlisting}
 
 At each step, we ``consume'' two hashes (one to verify a leaf, one to
 verify a pair), and add the pair to our verified set; thus, the number
@@ -1038,14 +726,14 @@ packet numbers to hash pairs that was not only much cleaner, but also
 \emph{scale invariant}. It's called Blackman ordering, and it looks like
 this:
 
-\begin{verbatim}
+\begin{Verbatim}[formatcom=\ttfamily, fontsize=\small]
                        ┌──────────────┴─────────────*
            ┌───────────┴───────────*              h─┴─h
      ┌─────┴─────*           d─────┴─────d        │   │
   ┌──┴──*     b──┴──b     f──┴──f     j──┴──j     │   │
 *─┴─* a─┴─a c─┴─c e─┴─e g─┴─g i─┴─i k─┴─k m─┴─m o─┴─o │
 0   1 2   3 4   5 6   7 8   9 10 11 12 13 14 15 16 17 18
-\end{verbatim}
+\end{Verbatim}
 
 See the difference? Instead of ordering the pairs on a first-needed
 basis, we jump around a bit. Specifically, we send a pair whose
@@ -1057,12 +745,12 @@ less clean when the number of leaves is not a power of two, but it's not
 the end of the world.) an Packet-by-packet verification for Blackman
 ordering:
 
-The \texttt{{[}x,y)} notation indicates a half-open set, i.e.~it
+The \texttt{{[}x,y)} notation indicates a half-open set, i.\,e.\ it
 includes \texttt{x,\ x+1,\ x+2,\ ...,\ y-1}. \texttt{{[}2,\ 4)} contains
 elements \texttt{2} and \texttt{3}. \texttt{{[}0,1)} contains the single
 element \texttt{0}.
 
-\begin{verbatim}
+\begin{lstlisting}[style=listingblock]
 Packet 0: Signed Merkle root + Merkle proof for leaf 0.
           Verify proof against signed root.
           We now have [0,1), [1,2), [2,4), [4,8), [8,16), and [16,19).
@@ -1079,7 +767,7 @@ Packet 3: Leaf 2 + Pair c.
           Verify pair c against [4,6).
           We now have [3,4), [4,5), [5,6), [6,8), [8,16), and [16,19).
 ... and so on.
-\end{verbatim}
+\end{lstlisting}
 
 Shortly after, \textasciitilde watter-parter tweaked the ordering
 slightly, offsetting it by one; this further simplified the low-level
@@ -1088,7 +776,7 @@ we used in the final version of Lockstep Streaming.
 
 Packet-by-packet verification for Lackman ordering:
 
-\begin{verbatim}
+\begin{lstlisting}[style=listingblock]
 Packet 0: Signed Merkle root + Merkle proof for leaf 0.
           Verify proof against signed root.
           We now have [0,1), [1,2), [2,4), [4,8), [8,16), and [16,19).
@@ -1104,7 +792,7 @@ Packet 3: Leaf 2 + Pair b.
           Verify pair b against [4,8).
           We now have [3,4), [4,6), [6,8), [8,16), and [16,19).
 ... and so on.
-\end{verbatim}
+\end{lstlisting}
 
 Compared to Blackman ordering, the pairs appear offset by one position,
 which simplifies the bit-manipulation logic for computing which pair to
@@ -1226,302 +914,217 @@ checkpointing system. After a process crash, machine restart, or any
 other transient failure, the download can be resumed with minimal loss
 of information.
 
-Injecting an authenticated jumbo frame into Arvo maintains a security
-boundary. Urbit's main runtime, Vere, has two Unix processes: one runs
-the Arvo kernel, and the other handles input and output. Arvo maintains
-ultimate responsibility for cryptographic operations. This lets the
-private key remain solely in the Arvo process, leaving the I/O process
-without the ability to encrypt, decrypt, authenticate, or verify
-authentication.
+Injecting an authenticated jumbo frame into Arvo maintains a security boundary. Urbit's main runtime, Vere, has two Unix processes: one runs the Arvo kernel, and the other handles input and output. Arvo maintains ultimate responsibility for cryptographic operations. This lets the private key remain solely in the Arvo process, leaving the I/O process without the ability to encrypt, decrypt, authenticate, or verify authentication.
 
-Instead, the runtime delegates any operation requiring a private key to
-Arvo, including validating the message-level authentication in the first
-packet of a scry response. To add a layer of defense in depth in case
-the I/O process is compromised, Arvo performs its own packet validation,
-including the Lockstep packet authentication. This remains efficient
-because each packet can be a large jumbo frame.
+Instead, the runtime delegates any operation requiring a private key to Arvo, including validating the message-level authentication in the first packet of a scry response. To add a layer of defense in depth in case the I/O process is compromised, Arvo performs its own packet validation, including the Lockstep packet authentication. This remains efficient because each packet can be a large jumbo frame.
 
-Checkpointing has another benefit. No matter how large a message is, the
-downloader can keep a fixed upper bound on the memory footprint while
-download that message, proportional to one jumbo frame.
+Checkpointing has another benefit. No matter how large a message is, the downloader can keep a fixed upper bound on the memory footprint while download that message, proportional to one jumbo frame.
 
-\subsubsection{Download Resumption}\label{download-resumption}
+\subsubsection{Download Resumption}
+\label{download-resumption}
 
-After a transient failure -- most commonly a process crash or machine
-restart -- a requesting ship can resume a download. In order to pick up
-from where it left off, the runtime first asks its local Arvo for the
-leaf-packet hashes it needs, which Arvo generates on demand from the
-jumbo frames that have already been downloaded and stored in Arvo. This
-is $O(\log(n))$ hashes, where $n$ is the message length, and no message data
-needs to be sent over inter-process communication in order to resume a
-download, preventing restarts from becoming slow and memory-intensive.
+After a transient failure -- most commonly a process crash or machine restart -- a requesting ship can resume a download. In order to pick up from where it left off, the runtime first asks its local Arvo for the leaf-packet hashes it needs, which Arvo generates on demand from the jumbo frames that have already been downloaded and stored in Arvo. This is $O(\log(n))$ hashes, where $n$ is the message length, and no message data needs to be sent over inter-process communication in order to resume a download, preventing restarts from becoming slow and memory-intensive.
 
-Once the runtime has the hashes it needs, it resumes the Lockstep
-streaming verification that it had been doing, beginning with the next
-jumbo frame after the last one that had been downloaded and saved in
-Arvo.
+Once the runtime has the hashes it needs, it resumes the Lockstep streaming verification that it had been doing, beginning with the next jumbo frame after the last one that had been downloaded and saved in Arvo.
 
-Download checkpointing and resumption together provide a good set of
-tools for download management. This is beyond what \textsc{tcp} provides, or even
-\textsc{http}. \textsc{http} has resumption headers, but both client and server have to
-opt into using them, so in practice many \textsc{http}-based downloads cannot be
-resumed.
+Download checkpointing and resumption together provide a good set of tools for download management. This is beyond what \textsc{tcp} provides, or even \textsc{http}. \textsc{http} has resumption headers, but both client and server have to opt into using them, so in practice many \textsc{http}-based downloads cannot be resumed.
 
-\section{Congestion Control}\label{congestion-control}
+\section{Congestion Control}
+\label{congestion-control}
 
-In Directed Messaging, congestion control is pluggable. The requesting
-ship decides how many request packets to send and at what time. The
-publisher ship is only responsible for responding to requests and does
-not participate in congestion control.
+In Directed Messaging, congestion control is pluggable. The requesting ship decides how many request packets to send and at what time. The publisher ship is only responsible for responding to requests and does not participate in congestion control.
 
-It is possible for an Urbit implementation to have functioning, if not
-performant, networking, without any runtime implementation of congestion
-control. The formal specification in the networking module of the Arvo
-kernel for how a ship sends request packets is a simple one-at-a-time
-indefinite repeating timer. The ship sends the first request packet,
-repeating it every thirty seconds until a response packet is heard, at
-which point it begins requesting the next packet.
+It is possible for an Urbit implementation to have functioning, if not performant, networking, without any runtime implementation of congestion control. The formal specification in the networking module of the Arvo kernel for how a ship sends request packets is a simple one-at-a-time indefinite repeating timer. The ship sends the first request packet, repeating it every thirty seconds until a response packet is heard, at which point it begins requesting the next packet.
 
-Performant congestion control, then, is an extension of Urbit's idea of
-a ``jet'', i.e.~a peephole optimization that replaces a built-in
-function, defined formally but is likely slow, with an optimized
-low-level implementation.
+Performant congestion control, then, is an extension of Urbit's idea of a ``jet'', i.\,e.\ a peephole optimization that replaces a built-in function, defined formally but is likely slow, with an optimized low-level implementation.
 
-In practice, this slow packet re-send is used for retrying dead
-connections, where the publishing ship has been unresponsive for a long
-time. This is important because Urbit network requests generally do not
-time out at the application level; they are considered persistent, and
-they must be retried indefinitely. Fast, runtime-based congestion
-control only kicks in when the runtime receives a response packet,
-indicating the publishing ship has become responsive.
+In practice, this slow packet re-send is used for retrying dead connections, where the publishing ship has been unresponsive for a long time. This is important because Urbit network requests generally do not time out at the application level; they are considered persistent, and they must be retried indefinitely. Fast, runtime-based congestion control only kicks in when the runtime receives a response packet, indicating the publishing ship has become responsive.
 
-The current implementation of Directed Messaging employs a modified \textsc{tcp}
-Tahoe-style congestion control algorithm adapted to its request/response
-architecture and packet-oriented nature. The protocol's congestion
-control differs from traditional \textsc{tcp} in several fundamental ways due to
-its pull-based communication model and implicit acknowledgment scheme.
+The current implementation of Directed Messaging employs a modified \textsc{tcp} Tahoe-style congestion control algorithm adapted to its request/response architecture and packet-oriented nature. The protocol's congestion control differs from traditional \textsc{tcp} in several fundamental ways due to its pull-based communication model and implicit acknowledgment scheme.
 
-\subsection{Architectural Foundation}\label{architectural-foundation}
+\subsection{Architectural Foundation}
+\label{architectural-foundation}
 
-Unlike \textsc{tcp}'s push-based model where senders transmit data and await
-separate acknowledgment packets, Directed Messaging operates on a
-request/response paradigm. The requesting ship sends PEEK packets to
-solicit specific fragments, and the responding ship sends PAGE packets
-containing the requested data. The arrival of each PAGE packet serves as
-an implicit acknowledgment---no separate ACK packets exist in the
-protocol. This inversion places congestion control responsibility on the
-requester rather than the sender, allowing the party pulling data to
-directly regulate network load.
+Unlike \textsc{tcp}'s push-based model where senders transmit data and await separate acknowledgment packets, Directed Messaging operates on a request/response paradigm. The requesting ship sends \textsc{peek} packets to solicit specific fragments, and the responding ship sends \textsc{page} packets containing the requested data. The arrival of each \textsc{page} packet serves as an implicit acknowledgment---no separate \textsc{ack} packets exist in the protocol. This inversion places congestion control responsibility on the requester rather than the sender, allowing the party pulling data to directly regulate network load.
 
-The protocol operates on fixed-size fragments rather than byte streams.
-Each fragment contains up to 1024 bytes of payload data (at the default
-bloq parameter of 13). The congestion window (cwnd) measures capacity in
-fragment count rather than bytes, providing coarser but simpler
-granularity than \textsc{tcp}'s byte-oriented approach.
+The protocol operates on fixed-size fragments rather than byte streams. Each fragment contains up to 1024 bytes of payload data (at the default \lstinline[style=inlinecode]{$bloq} parameter of 13). The congestion window (\lstinline[style=inlinecode]{cwnd}) measures capacity in fragment count rather than bytes, providing coarser but simpler granularity than \textsc{tcp}'s byte-oriented approach.
 
 \subsection{State Variables}\label{state-variables}
 
 Congestion control state is maintained per peer and includes:
 
 \begin{itemize}
-\tightlist
 \item
-  cwnd (congestion window): Number of fragments allowed in flight
+  \lstinline[style=inlinecode]{cwnd} (congestion window): Number of fragments allowed in flight
   simultaneously
 \item
-  ssthresh (slow start threshold): Boundary between exponential and
+  \lstinline[style=inlinecode]{ssthresh} (slow start threshold): Boundary between exponential and
   linear growth phases
 \item
-  rtt (round-trip time): Smoothed estimate of network latency
+  \lstinline[style=inlinecode]{rtt} (round-trip time): Smoothed estimate of network latency
 \item
-  rttvar (RTT variance): Smoothed variance in round-trip measurements
+  \lstinline[style=inlinecode]{rttvar} (\textsc{rtt} variance): Smoothed variance in round-trip measurements
 \item
-  rto (retransmission timeout): Calculated timeout for loss detection
+  \lstinline[style=inlinecode]{rto} (retransmission timeout): Calculated timeout for loss detection
 \end{itemize}
 
-Per-request state tracks which fragments have been sent, when they were
-sent, how many retransmission attempts have occurred, and which
-fragments have been received using an efficient bitset representation.
+\noindent
+Per-request state tracks which fragments have been sent, when they were sent, how many retransmission attempts have occurred, and which fragments have been received using an efficient bitset representation.
 
-\subsection{Slow Start and Congestion
-Avoidance}\label{slow-start-and-congestion-avoidance}
+\subsection{Slow Start and Congestion Avoidance}
+\label{slow-start-and-congestion-avoidance}
 
 The protocol implements two growth phases analogous to \textsc{tcp}:
 
-Slow Start Phase (\texttt{cwnd\ \textless{}\ ssthresh}): Upon initiating
-a request or recovering from congestion, cwnd begins at 1 fragment. For
-each fragment acknowledgment received (implicitly, by receiving the
-corresponding PAGE packet), cwnd increments by 1. This produces
-exponential growth: 1→2→4→8→16, allowing rapid probing of available
-bandwidth.
+\begin{itemize}
+  \item  \textbf{Slow Start Phase (\lstinline[style=inlinecode]{cwnd < ssthresh})}: Upon initiating a request or recovering from congestion, \lstinline[style=inlinecode]{cwnd} begins at 1 fragment. For each fragment acknowledgment received (implicitly, by receiving the corresponding \textsc{page} packet), \lstinline[style=inlinecode]{cwnd} increments by 1. This produces exponential growth: 1→2→4→8→16, allowing rapid probing of available bandwidth.
 
-Congestion Avoidance Phase (\texttt{cwnd\ ≥\ ssthresh}): Once cwnd
-reaches ssthresh, growth becomes linear. The implementation uses a
-fractional accumulation strategy: for each acknowledgment, a fractional
-counter accumulates 1/cwnd of a window increment. When the accumulated
-value reaches cwnd, the actual cwnd increments by 1, yielding
-approximately one window size increase per round-trip time.
+  \item  \textbf{Congestion Avoidance Phase (\lstinline[style=inlinecode]{cwnd >= ssthresh})}: Once \lstinline[style=inlinecode]{cwnd} reaches \lstinline[style=inlinecode]{ssthresh}, growth becomes linear. The implementation uses a fractional accumulation strategy: for each acknowledgment, a fractional counter accumulates 1/\lstinline[style=inlinecode]{cwnd} of a window increment. When the accumulated value reaches \lstinline[style=inlinecode]{cwnd}, the actual \lstinline[style=inlinecode]{cwnd} increments by 1, yielding approximately one window size increase per round-trip time.
+\end{itemize}
 
-The default ssthresh is initialized to 10,000 fragments (approximately
-10 MB), effectively allowing slow start to dominate for typical transfer
-sizes.
+\noindent
+The default \lstinline[style=inlinecode]{ssthresh} is initialized to 10,000 fragments (approximately 10 MB), effectively allowing slow start to dominate for typical transfer sizes.
 
-\subsection{Loss Detection and
-Recovery}\label{loss-detection-and-recovery}
+\subsection{Loss Detection and Recovery}
+\label{loss-detection-and-recovery}
 
-Directed Messaging currently implements timeout-based loss detection
-only, without fast retransmit or fast recovery mechanisms. This places
-it closest to \textsc{tcp} Tahoe's behavior, though with an important
-modification to timeout handling.
+Directed Messaging currently implements timeout-based loss detection only, without fast retransmit or fast recovery mechanisms. This places it closest to \textsc{tcp} Tahoe's behavior, though with an important modification to timeout handling.
 
-Timeout Detection: Each in-flight fragment's transmission time is
-recorded. A retransmission timer fires when the oldest unacknowledged
-fragment exceeds the calculated RTO. The protocol scans all in-flight
-fragments upon timeout and retransmits any that have been outstanding
-beyond the RTO interval.
+\begin{itemize}
+  \item  \textbf{Timeout Detection}: Each in-flight fragment's transmission time is recorded. A retransmission timer fires when the oldest unacknowledged fragment exceeds the calculated \textsc{rto}. The protocol scans all in-flight fragments upon timeout and retransmits any that have been outstanding beyond the \textsc{rto} interval.
 
-Timeout Response: Upon detecting packet loss via timeout, the protocol
-reduces network load by:
-\begin{enumerate}
-\item Setting \lstinline[style=inlinecode]{ssthresh\ =\ max(1,\ cwnd\ /\ 2)}.
-\item Setting \lstinline[style=inlinecode]{cwnd\ =\ ssthresh}.
-\item Doubling \lstinline[style=inlinecode]{rto} (up to a maximum bound).
-\end{enumerate}
+  \item  \textbf{Timeout Response}: Upon detecting packet loss via timeout, the protocol reduces network load by:
+  \begin{enumerate}
+  \item Setting \lstinline[style=inlinecode]{ssthresh = max(1, cwnd / 2)}.
+  \item Setting \lstinline[style=inlinecode]{cwnd = ssthresh}.
+  \item Doubling \lstinline[style=inlinecode]{rto} (up to a maximum bound).
+  \end{enumerate}
+\end{itemize}
 
+\noindent
 This differs from \textsc{tcp} Tahoe, which sets \lstinline[style=inlinecode]{cwnd = 1} and restarts slow start from the beginning. Directed Messaging's approach is less conservative, immediately resuming transmission at the reduced threshold rather than slowly ramping up from a single packet. This assumes that while congestion occurred, the network can still sustain traffic at half the previous rate without requiring a full slow start restart.
 
 The lack of fast retransmit (triggering on three duplicate
 acknowledgments) represents a significant difference from modern \textsc{tcp} variants. Fast retransmit requires detecting duplicate acks, which in Directed Messaging would mean detecting requests for the same fragment.  However, the current implementation treats each arriving \textsc{page} packet independently without tracking the ordering implications that would enable fast retransmit. This is a known simplification intended for future enhancement.
 
-\subsection{Round-Trip Time
-Estimation}\label{round-trip-time-estimation}
+\subsection{Round-Trip Time Estimation}
+\label{round-trip-time-estimation}
 
-The protocol employs Jacobson/Karels RTT estimation, the same algorithm used in \textsc{tcp}. When a fragment acknowledgment arrives (excluding retransmissions), the round-trip time measurement (\lstinline[style=inlinecode]{rtt_datum}) is calculated as the difference between current time and transmission time.
+The protocol employs Jacobson/Karels \textsc{rtt} estimation, the same algorithm used in \textsc{tcp}. When a fragment acknowledgment arrives (excluding retransmissions), the round-trip time measurement (\lstinline[style=inlinecode]{rtt_datum}) is calculated as the difference between current time and transmission time.
 
-RTT smoothing uses exponential weighted moving averages with traditional \textsc{tcp} parameters:
+\textsc{rtt} smoothing uses exponential weighted moving averages with traditional \textsc{tcp} parameters:
 \begin{itemize}
-\item  \lstinline[style=inlinecode]{rtt = (rtt_datum + 7×rtt) / 8  (α = 1/8)}
-\item  \lstinline[style=inlinecode]{rttvar = (|rtt_datum - rtt| + 7×rttvar) / 8  (β = 1/4)}
+\item  \lstinline[style=inlinecode]{rtt = (rtt_datum + 7×rtt) / 8  ( α = 1/8)}
+\item  \lstinline[style=inlinecode]{rttvar = (|rtt_datum - rtt| + 7×rttvar) / 8  ( β = 1/4)}
 \end{itemize}
 
 The retransmission timeout is calculated as
 \lstinline[style=inlinecode]{rto = rtt + 4×rttvar}, clamped to a minimum of 200 milliseconds and a maximum that varies by context (typically 2 minutes for most traffic, 25 seconds for keepalive probes to sponsors).
 
-Retransmitted fragments do not contribute to RTT estimation, following Karn's algorithm to avoid ambiguity about which transmission is being acknowledged.
+Retransmitted fragments do not contribute to \textsc{rtt} estimation, following Karn's algorithm to avoid ambiguity about which transmission is being acknowledged.
 
 \subsection{Selective Request Architecture}
 \label{selective-request-architecture}
 
-The implicit acknowledgment scheme combines naturally with selective
-fragment requesting. The protocol maintains a bitset tracking which
-fragments have been received. When requesting additional fragments
-during congestion-controlled transmission, the requester consults both
-the congestion window (how many new requests can be sent) and the bitset
-(which fragments are needed). This provides the benefits of \textsc{tcp} \textsc{sack}
-without requiring additional protocol machinery---selectivity is
-inherent to the request/response model.
+The implicit acknowledgment scheme combines naturally with selective fragment requesting. The protocol maintains a bitset tracking which fragments have been received. When requesting additional fragments during congestion-controlled transmission, the requester consults both the congestion window (how many new requests can be sent) and the bitset (which fragments are needed). This provides the benefits of \textsc{tcp} \textsc{sack} without requiring additional protocol machinery -- selectivity is inherent to the request/response model.
 
-When fragments arrive out of order, the \textsc{lss} (Lockstep Signature Scheme)
-authentication requires buffering misordered packets until their Merkle
-proof predecessors arrive. Once authenticated, these fragments are
-marked received in the bitset, and the congestion control state updates
-accordingly.
+When fragments arrive out of order, the \textsc{lss} (Lockstep Signature Scheme) authentication requires buffering misordered packets until their Merkle proof predecessors arrive. Once authenticated, these fragments are marked received in the bitset, and the congestion control state updates accordingly.
 
-\subsection{Request Rate Limiting}\label{request-rate-limiting}
+\subsection{Request Rate Limiting}
+\label{request-rate-limiting}
 
-The congestion window limits the number of PEEK requests in flight.
-Before sending additional requests, the protocol calculates:
+\sloppy
+The congestion window limits the number of \textsc{peek} requests in flight. Before sending additional requests, the protocol \mbox{calculates}
 
-\texttt{available\_window\ =\ cwnd\ -\ outstanding\_requests}
+\lstinline[style=inlinecode]{available_window = cwnd - outstanding_requests}
 
-where outstanding\_requests counts fragments that have been requested
-but not yet received. This naturally throttles the request rate
-according to observed network capacity. As PAGE packets arrive (serving
-as acknowledgments), outstanding\_requests decreases, allowing new PEEK
-packets to be sent.
+\noindent\sloppy
+where \lstinline[style=inlinecode]{outstanding_requests} counts fragments that have been requested but not yet received. This naturally throttles the request rate according to observed network capacity. As \textsc{page} packets arrive (serving as acknowledgments), \lstinline[style=inlinecode]{outstanding_requests} decreases, allowing new \textsc{peek} packets to be sent.
 
-This pull-based flow control provides inherent advantages: the requester
-cannot be overwhelmed by data it didn't request, and the congestion
-control directly limits the rate at which the requester pulls data from
-the network.
+This pull-based flow control provides inherent advantages: the requester cannot be overwhelmed by data it didn't request, and the congestion control directly limits the rate at which the requester pulls data from the network.
 
-\subsection{Per-Peer State
-Management}\label{per-peer-state-management}
+\subsection{Per-Peer State Management}
+\label{per-peer-state-management}
 
-Congestion control state is maintained per peer rather than per
-connection or per flow. All concurrent requests to the same peer share a
-single congestion window and RTT estimate. This design choice reflects
-the architectural principle that network capacity constraints exist
-between pairs of ships rather than between individual conversations.
+Congestion control state is maintained per peer rather than per connection or per flow. All concurrent requests to the same peer share a single congestion window and \textsc{rtt} estimate. This design choice reflects the architectural principle that network capacity constraints exist between pairs of ships rather than between individual conversations.
 
-Sharing state across requests to the same peer provides several
-benefits: 1. RTT measurements from any request improve estimates for all
-requests 2. Congestion signals from one request protect other concurrent
-requests 3. State initialization costs are amortized across multiple
-requests 4. The aggregate transmission rate to each peer is controlled
+Sharing state across requests to the same peer provides several benefits:
+\begin{enumerate}
+\item \textsc{rtt} measurements from any request improve estimates for all requests.
+\item Congestion signals from one request protect other concurrent requests.
+\item State initialization costs are amortized across multiple requests.
+\item The aggregate transmission rate to each peer is controlled.
+\end{enumerate}
 
-However, this also means that multiple concurrent large transfers to the
-same peer must share available bandwidth, which could reduce throughput
-compared to per-flow windows in some scenarios.
+\noindent
+However, this also means that multiple concurrent large transfers to the same peer must share available bandwidth, which could reduce throughput compared to per-flow windows in some scenarios.
 
-\subsection{Initial Window and
-Probing}\label{initial-window-and-probing}
+\subsection{Initial Window and Probing}
+\label{initial-window-and-probing}
 
-New peer connections begin with conservative initial values: cwnd = 1,
-rtt = 1 second, rttvar = 1 second, rto = 200 milliseconds. The first
-fragment request initiates RTT measurement and slow start growth. This
-cautious initialization ensures the protocol probes network capacity
-gradually rather than assuming high bandwidth is available.
+New peer connections begin with conservative initial values: \lstinline[style=inlinecode]{cwnd = 1}, \lstinline[style=inlinecode]{rtt = 1000 ms}, \lstinline[style=inlinecode]{rttvar = 1000 ms}, \lstinline[style=inlinecode]{rto = 200 ms}. The first fragment request initiates \textsc{rtt} measurement and slow start growth. This cautious initialization ensures the protocol probes network capacity gradually rather than assuming high bandwidth is available.
 
-For peers with no recent traffic, the congestion state persists but
-becomes stale. Future enhancements may include state expiration and
-re-initialization after prolonged idle periods, though the current
-implementation maintains state indefinitely once a peer is known.
+For peers with no recent traffic, the congestion state persists but becomes stale. Future enhancements may include state expiration and re-initialization after prolonged idle periods, though the current implementation maintains state indefinitely once a peer is known.
 
-\subsection{Comparison with \textsc{tcp}
+\subsection[{Comparison with \textsc{tcp}
+Variants}]{Comparison with TCP
 Variants}\label{comparison-with-tcp-variants}
 
 The congestion control algorithm most closely resembles \textsc{tcp} Tahoe but
 with notable differences:
 
-Similarities to Tahoe: - Slow start with exponential growth - Congestion
-avoidance with linear growth - Loss detection via timeout only -
-Conservative initial probing
+Similarities to Tahoe:
 
-Differences from Tahoe: - Modified timeout recovery (cwnd = ssthresh
-rather than cwnd = 1) - Packet-oriented rather than byte-oriented
-windows - Implicit acknowledgment via data receipt - Pull-based rather
-than push-based architecture - Per-peer rather than per-connection state
+\begin{itemize}
+  \item Slow start with exponential growth
+  \item Congestion avoidance with linear growth
+  \item Loss detection via timeout only
+  \item Conservative initial probing
+\end{itemize}
 
-Compared to NewReno/\textsc{sack}: The protocol lacks fast retransmit and fast
-recovery, making it less responsive to isolated packet loss. However,
-the selective request architecture provides the functional benefits of
-\textsc{sack} naturally. The implicit acknowledgment scheme eliminates issues
-with ACK loss and compression that affect \textsc{tcp}.
+Differences from Tahoe:
+
+\begin{itemize}
+  \item Modified timeout recovery (\lstinline[style=inlinecode]{cwnd = ssthresh}
+rather than \lstinline[style=inlinecode]{cwnd = 1})
+  \item Packet-oriented rather than byte-oriented windows
+  \item Implicit acknowledgment via data receipt
+  \item Pull-based rather than push-based architecture
+  \item Per-peer rather than per-connection state
+\end{itemize}
+
+Compared to NewReno/\textsc{sack}, the protocol lacks fast retransmit and fast recovery, making it less responsive to isolated packet loss.  However, the selective request architecture provides the functional benefits of \textsc{sack} naturally.  The implicit acknowledgment scheme eliminates issues with \textsc{ack} loss and compression that affect \textsc{tcp}.
 
 \subsection{Design Trade-offs}\label{design-trade-offs}
 
 The congestion control design reflects several architectural trade-offs:
 
-Advantages: - Simpler than modern \textsc{tcp} variants (no fast recovery
-complexity) - Natural selective acknowledgment through request/response
-model - Requester controls rate, preventing receiver overwhelm - No
-separate ACK channel to fail - Precise retransmission control with
-bitset tracking
+Advantages: 
 
-Limitations: - Lack of fast retransmit increases latency for isolated
-losses - Packet-oriented windows provide coarser bandwidth control -
-Per-peer state sharing may reduce throughput for concurrent flows -
-Modified timeout behavior is less studied than standard algorithms
+\begin{itemize}
+  \item  Simpler than modern \textsc{tcp} variants (no fast recovery complexity).
+  \item  Natural selective acknowledgment through request/response model.
+  \item  Requester controls rate, preventing receiver overwhelm.
+  \item  No separate \textsc{ack} channel to fail.
+  \item  Precise retransmission control with bitset tracking.
+\end{itemize}
+
+Limitations: 
+\begin{itemize}
+  \item Lack of fast retransmit increases latency for isolated losses.
+  \item Packet-oriented windows provide coarser bandwidth control.
+  \item Per-peer state sharing may reduce throughput for concurrent flows.
+  \item Modified timeout behavior is less studied than standard algorithms.
+\end{itemize}
 
 \subsection{Future Enhancements}\label{future-enhancements}
 
 The protocol architecture supports several potential improvements
 without fundamental redesign. Fast retransmit could be implemented by
 tracking fragment request patterns and detecting when requests skip over
-missing fragments. Fast recovery could leverage the existing ssthresh
+missing fragments. Fast recovery could leverage the existing \lstinline[style=inlinecode]{ssthresh}
 calculation while avoiding the full slow start restart. Additional
-sophistication in RTT measurement could distinguish network delay from
+sophistication in \textsc{rtt} measurement could distinguish network delay from
 application processing time.
 
 The current implementation represents a pragmatic balance between
@@ -1574,5 +1177,5 @@ out a full pub-sub system with stateless publishers
 \tombstone
 
 \selectlanguage{USenglish}
-% \printbibliography
+\printbibliography
 \end{document}
