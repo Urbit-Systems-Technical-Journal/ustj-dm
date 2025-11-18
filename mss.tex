@@ -57,7 +57,7 @@ The Directed Messaging project was a fundamental overhaul of Urbit's networking 
 \sloppy
 These improvements were driven by Directed Messaging's total adherence to a request-response discipline throughout the stack, bundled with heavy use of Urbit's immutable referentially-transparent global namespace, called the ``scry namespace''. Every network message is either a request for data at a ``scry path'' (Urbit's equivalent of a \textsc{url}), or an authenticated response that includes the data at that path. This is true at the message layer and the packet layer, and for both reads (queries) and writes (commands).
 
-Before Directed Messaging, the bandwidth Urbit was able to utilize was extremely limited, maxing out in the hundreds of kilobytes per second. It lacked orders of magnitude of performance in order to make effective use of commodity networking hardware, such as on a laptop or cloud instance. With Directed Messaging, Urbit's networking speed was able to reach over 1 gigabit/s on commodity hardware, sufficient for the vast majority of contemporary personal use cases.
+Before Directed Messaging, the bandwidth Urbit was able to utilize was extremely limited, maxing out in the hundreds of kilobytes per second. It lacked orders of magnitude of performance in order to make effective use of commodity networking hardware, such as on a laptop or cloud instance. With Directed Messaging, Urbit's networking speed was able to reach over 1~Gibit/s on commodity hardware, sufficient for the vast majority of contemporary personal use cases.
 
 Directed Messaging managed to improve throughput while preserving Urbit's already-good latency performance. For small messages, a network transaction is accomplished in one roundtrip: a command sent one way, followed by an acknowledgment the other way. Due to Urbit's public key infrastructure (\textsc{pki}) being disseminated to all nodes \emph{a priori} from a Byzantine fault-tolerant source (the Ethereum blockchain and a bespoke L2 for economic efficiency), no cryptographic handshake is needed for two Urbit nodes (called ``ship''s in Urbit lingo) to begin communication -- even their first exchange is a single roundtrip.
 
@@ -471,7 +471,7 @@ An obvious first place to look for inspiration was \href{https://github.com/ocon
 0   1 2   3 4   5 6   7 8   9 10 11 12 13 14 15 16 17 18
 \end{Verbatim}
 
-This is a \href{https://eprint.iacr.org/2021/038}{binary numeral tree}: a structure composed of perfect binary trees, imposed upon a flat sequence of bytes. The numbers 0-18 represent leaf data (typically 1 KiB per leaf), while letters \emph{a}-\emph{r} represents tree hashes that are used to verify the leaves. So packet 3 would contain bytes 3072--4096 and leaf hash \emph{d}.
+This is a \href{https://eprint.iacr.org/2021/038}{binary numeral tree}: a structure composed of perfect binary trees, imposed upon a flat sequence of bytes. The numbers 0-18 represent leaf data (typically 1~KiB per leaf), while letters \emph{a}-\emph{r} represents tree hashes that are used to verify the leaves. So packet 3 would contain bytes 3072--4096 and leaf hash \emph{d}.
 
 The main problem with this approach is that it requires buffering. In order to verify leaf 0, we need hashes \emph{a} through \emph{e} -- five packets! Worse, once we've received five packets, we have the whole \texttt{{[}0,4)} subtree, making hashes \emph{d} and \emph{e} redundant. (In \textsc{bnt}s, we use the notation \texttt{{[}n,m)} to refer to the perfect subtree containing leaves \texttt{n} through \texttt{m-1}.)
 
@@ -517,10 +517,7 @@ Packet 3: Leaf 2 + Pair c.
 
 At each step, we ``consume'' two hashes (one to verify a leaf, one to verify a pair), and add the pair to our verified set; thus, the number of verified-but-unused hashes stays constant until we get to packet 13. At this point, packets still contain leaf data (so we'll consume one hash), but there are no more pairs left to send; thus, our stockpile of hashes is steadily exhausted, until we consume the final hash to verify the final packet.
 
-This is a solid improvement! We dubbed it ``Lockstep Streaming,'' after the fact that verification proceeds in lockstep with packet receipt. But when we sat down to write the code for matching verified-but-unused hashes to incoming leaves and pairs, things got hairy. It was clearly \emph{possible}, but the ugliness of the logic suggested that there was a better way. And after filling plenty of notebook pages with hand-drawn Merkle trees, \patp{rovnys-ricfer} found it: a mapping of
-packet numbers to hash pairs that was not only much cleaner, but also
-\emph{scale invariant}. It's called Blackman ordering, and it looks like
-this:
+This is a solid improvement! We dubbed it ``Lockstep Streaming,'' after the fact that verification proceeds in lockstep with packet receipt. But when we sat down to write the code for matching verified-but-unused hashes to incoming leaves and pairs, things got hairy. It was clearly \emph{possible}, but the ugliness of the logic suggested that there was a better way. And after filling plenty of notebook pages with hand-drawn Merkle trees, \patp{rovnys-ricfer} found it: a mapping of packet numbers to hash pairs that was not only much cleaner, but also \emph{scale invariant}. It's called Blackman ordering, and it looks like this:
 
 \begin{Verbatim}[formatcom=\ttfamily, fontsize=\small]
                        ┌──────────────┴─────────────*
@@ -531,20 +528,9 @@ this:
 0   1 2   3 4   5 6   7 8   9 10 11 12 13 14 15 16 17 18
 \end{Verbatim}
 
-See the difference? Instead of ordering the pairs on a first-needed
-basis, we jump around a bit. Specifically, we send a pair whose
-``height'' corresponds to the number of trailing zeroes in the binary
-representation of the packet number. For example, packet 4 is 100 in
-binary, with two trailing zeroes, so we send pair d, which sits two
-levels above the leaves. (As you might expect, the logic gets slightly
-less clean when the number of leaves is not a power of two, but it's not
-the end of the world.) an Packet-by-packet verification for Blackman
-ordering:
+See the difference? Instead of ordering the pairs on a first-needed basis, we jump around a bit. Specifically, we send a pair whose ``height'' corresponds to the number of trailing zeroes in the binary representation of the packet number. For example, packet 4 is \lstinline[style=inlinecode]{0b100} in binary, with two trailing zeroes, so we send pair d, which sits two levels above the leaves.\footnote{As you might expect, the logic gets slightly less clean when the number of leaves is not a power of two, but it's hardly catastrophic.} Here is a packet-by-packet verification for Blackman ordering:
 
-The \texttt{{[}x,y)} notation indicates a half-open set, i.\,e.\ it
-includes \texttt{x,\ x+1,\ x+2,\ ...,\ y-1}. \texttt{{[}2,\ 4)} contains
-elements \texttt{2} and \texttt{3}. \texttt{{[}0,1)} contains the single
-element \texttt{0}.
+The \lstinline[style=inlinecode]{[x,y)} notation indicates a half-open set, i.\,e.\ it includes \lstinline[style=inlinecode]{x}, \lstinline[style=inlinecode]{x+1}, \lstinline[style=inlinecode]{x+2}, \ldots{}, \lstinline[style=inlinecode]{y-1}.  \lstinline[style=inlinecode]{[2,4)} contains elements \lstinline[style=inlinecode]{2} and \lstinline[style=inlinecode]{3}.  \lstinline[style=inlinecode]{[0,1)} contains the single element \lstinline[style=inlinecode]{0}.
 
 \begin{lstlisting}[style=listingblock]
 Packet 0: Signed Merkle root + Merkle proof for leaf 0.
@@ -565,12 +551,9 @@ Packet 3: Leaf 2 + Pair c.
 ... and so on.
 \end{lstlisting}
 
-Shortly after, \patp{watter-parter} tweaked the ordering
-slightly, offsetting it by one; this further simplified the low-level
-bithacking. We called this variant ``Lackman ordering,'' and it's what
-we used in the final version of Lockstep Streaming.
+Shortly after, \patp{watter-parter} tweaked the ordering slightly, offsetting it by one; this further simplified the low-level bithacking. We called this variant ``Lackman ordering,'' and it's what we used in the final version of Lockstep Streaming.
 
-Packet-by-packet verification for Lackman ordering:
+Packet-by-packet verification for Lackman ordering looks like this:
 
 \begin{lstlisting}[style=listingblock]
 Packet 0: Signed Merkle root + Merkle proof for leaf 0.
@@ -590,22 +573,9 @@ Packet 3: Leaf 2 + Pair b.
 ... and so on.
 \end{lstlisting}
 
-Compared to Blackman ordering, the pairs appear offset by one position,
-which simplifies the bit-manipulation logic for computing which pair to
-include in each packet.
+Compared to Blackman ordering, the pairs appear offset by one position, which simplifies the bit-manipulation logic for computing which pair to include in each packet.
 
-There's one more optimization worth mentioning: If the message is small
-enough, we can skip the initial step of sending a packet containing only
-a Merkle proof (with no leaf data). Obviously, for a one-leaf message,
-we can simply send that leaf; the hash of that leaf is the Merkle root.
-For a two-leaf message, we can send the leaf plus its sibling hash
-(\texttt{{[}1,2)}); the verifier can hash the first leaf and combine it
-with the sibling hash to recover the root. And for a three- or four-leaf
-message, we can send \texttt{{[}1,2)} and \texttt{{[}2,3)} (or
-\texttt{{[}2,4)}, respectively). That's the limit, though; if a message
-has five leaves, we would need to send at least three sibling hashes for
-the verifier to recompute the root, but our packet framing only allows
-up to two hashes.
+There's one more optimization worth mentioning: If the message is small enough, we can skip the initial step of sending a packet containing only a Merkle proof (with no leaf data). Obviously, for a one-leaf message, we can simply send that leaf; the hash of that leaf is the Merkle root. For a two-leaf message, we can send the leaf plus its sibling hash (\lstinline[style=inlinecode]{[1,2)}); the verifier can hash the first leaf and combine it with the sibling hash to recover the root. And for a three- or four-leaf message, we can send \lstinline[style=inlinecode]{[1,2)} and \lstinline[style=inlinecode]{[2,3)} (or \lstinline[style=inlinecode]{[2,4)}, respectively). That's the limit, though; if a message has five leaves, we would need to send at least three sibling hashes for the verifier to recompute the root, but our packet framing only allows up to two hashes.
 
 \subsubsection{Arena Allocator}
 \label{arena-allocator}
@@ -619,24 +589,20 @@ the \texttt{beg} pointer with proper alignment.
 
 The arena allocator provides \emph{no individual deallocation} -- once memory is allocated from an arena, it can't be freed separately. Instead, the entire arena is freed at once when the data structure that owns it is destroyed.
 
-\subparagraph{Allocation Patterns}
+\paragraph{Allocation Patterns}
 \label{allocation-patterns}
 
 Arenas are created with sizes tailored to their use case:
 
 \begin{itemize}
   \item  \textbf{Pending Interest Table entries} use 16~KiB arenas.  These store lane addresses for pending requests, with the arena holding  the entry itself plus a linked list of address records.
-
-  \item  \textbf{Pending requests} allocate arenas at \textbf{5× the expected message size}. A request receiving a 1~MiB message gets a 5~MiB arena.  This single arena holds the request state, fragment data buffer, \textsc{lss} authentication pairs, packet statistics, bitset tracking received fragments, and pre-serialized request packets.
-
-  \item  \textbf{Jumbo frame cache entries} allocate based on proof size, data size, hash pairs, plus a 2KB buffer. For a 1~MiB message, this might be around 1--2~MiB. The arena stores the cached response data, Merkle proof spine, and authentication hashes.
-
-  \item  \textbf{Temporary arenas} for packet sending use message size plus 16~KB to hold serialized packets plus overhead.
-
+  \item  \textbf{Pending requests} allocate arenas at 5× the expected message size. A request receiving a 1~MiB message gets a 5~MiB arena.  This single arena holds the request state, fragment data buffer, \textsc{lss} authentication pairs, packet statistics, bitset tracking received fragments, and pre-serialized request packets.
+  \item  \textbf{Jumbo frame cache entries} allocate based on proof size, data size, hash pairs, plus a 2~KiB buffer. For a 1~MiB message, this might be around 1--2~MiB. The arena stores the cached response data, Merkle proof spine, and authentication hashes.
+  \item  \textbf{Temporary arenas} for packet sending use message size plus 16~KiB to hold serialized packets plus overhead.
   \item  \textbf{Scry callbacks} get small arenas for asynchronous Arvo interactions.
 \end{itemize}
 
-\subparagraph{Deallocation Triggers}\label{deallocation-triggers}
+\paragraph{Deallocation Triggers}\label{deallocation-triggers}
 
 Arenas are freed only when their parent data structure is destroyed:
 
@@ -648,7 +614,7 @@ Arenas are freed only when their parent data structure is destroyed:
   \item  \textbf{Cache eviction}: When the jumbo cache exceeds 200~MiB, it's entirely cleared and all cached arenas are freed.
 \end{itemize}
 
-\subparagraph{Lifecycle}\label{lifecycle}
+\paragraph{Lifecycle}\label{lifecycle}
 
 A typical request lifecycle:
 
@@ -699,11 +665,12 @@ The current implementation of Directed Messaging employs a modified \textsc{tcp}
 \subsection{Architectural Foundation}
 \label{architectural-foundation}
 
-Unlike \textsc{tcp}'s push-based model where senders transmit data and await separate acknowledgment packets, Directed Messaging operates on a request/response paradigm. The requesting ship sends \textsc{peek} packets to solicit specific fragments, and the responding ship sends \textsc{page} packets containing the requested data. The arrival of each \textsc{page} packet serves as an implicit acknowledgment---no separate \textsc{ack} packets exist in the protocol. This inversion places congestion control responsibility on the requester rather than the sender, allowing the party pulling data to directly regulate network load.
+Unlike \textsc{tcp}'s push-based model where senders transmit data and await separate acknowledgment packets, Directed Messaging operates on a request/response paradigm. The requesting ship sends \textsc{peek} packets to solicit specific fragments, and the responding ship sends \textsc{page} packets containing the requested data. The arrival of each \textsc{page} packet serves as an implicit acknowledgment -- no separate \textsc{ack} packets exist in the protocol. This inversion places congestion control responsibility on the requester rather than the sender, allowing the party pulling data to directly regulate network load.
 
 The protocol operates on fixed-size fragments rather than byte streams. Each fragment contains up to 1024 bytes of payload data (at the default \lstinline[style=inlinecode]{$bloq} parameter of 13). The congestion window (\lstinline[style=inlinecode]{cwnd}) measures capacity in fragment count rather than bytes, providing coarser but simpler granularity than \textsc{tcp}'s byte-oriented approach.
 
-\subsection{State Variables}\label{state-variables}
+\subsection{State Variables}
+\label{state-variables}
 
 Congestion control state is maintained per peer and includes:
 
@@ -724,13 +691,13 @@ Per-request state tracks which fragments have been sent, when they were sent, ho
 The protocol implements two growth phases analogous to \textsc{tcp}:
 
 \begin{itemize}
-  \item  \textbf{Slow Start Phase (\lstinline[style=inlinecode]{cwnd < ssthresh})}: Upon initiating a request or recovering from congestion, \lstinline[style=inlinecode]{cwnd} begins at 1 fragment. For each fragment acknowledgment received (implicitly, by receiving the corresponding \textsc{page} packet), \lstinline[style=inlinecode]{cwnd} increments by 1. This produces exponential growth: 1→2→4→8→16, allowing rapid probing of available bandwidth.
+  \item  \textbf{Slow Start Phase (\lstinline[style=inlinecode]{cwnd < ssthresh})}: Upon initiating a request or recovering from congestion, \lstinline[style=inlinecode]{cwnd} begins at one fragment. For each fragment acknowledgment received (implicitly, by receiving the corresponding \textsc{page} packet), \lstinline[style=inlinecode]{cwnd} increments by 1. This produces exponential growth: 1→2→4→8→16, allowing rapid probing of available bandwidth.
 
   \item  \textbf{Congestion Avoidance Phase (\lstinline[style=inlinecode]{cwnd >= ssthresh})}: Once \lstinline[style=inlinecode]{cwnd} reaches \lstinline[style=inlinecode]{ssthresh}, growth becomes linear. The implementation uses a fractional accumulation strategy: for each acknowledgment, a fractional counter accumulates 1/\lstinline[style=inlinecode]{cwnd} of a window increment. When the accumulated value reaches \lstinline[style=inlinecode]{cwnd}, the actual \lstinline[style=inlinecode]{cwnd} increments by 1, yielding approximately one window size increase per round-trip time.
 \end{itemize}
 
 \noindent
-The default \lstinline[style=inlinecode]{ssthresh} is initialized to 10,000 fragments (approximately 10 MB), effectively allowing slow start to dominate for typical transfer sizes.
+The default \lstinline[style=inlinecode]{ssthresh} is initialized to 10,000 fragments (approximately 10~MiB), effectively allowing slow start to dominate for typical transfer sizes.
 
 \subsection{Loss Detection and Recovery}
 \label{loss-detection-and-recovery}
