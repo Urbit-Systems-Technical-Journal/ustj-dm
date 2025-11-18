@@ -72,7 +72,7 @@ queries asking for data, into Urbit's immutable namespace, called the scry names
 \sloppy
 Along the way, we designed and implemented a novel scheme for streaming packet authentication. This helps prevent denial-of-service attacks that could forge individual packets and spoof them in order to invalidate a large download. This attack is prevented by authenticating every packet, but unlike the previous version of Urbit's networking stack, which authenticated each packet with a signature (meaning one signature for every kilobyte of data, which was extremely inefficient), there's only one signature per message. A Merkelization scheme using binary numeral trees (TODO: cite) is used to authenticate the packets within that message.
 
-This achieves a property that, to our knowledge, has not been demonstrated in prior packet authentication schemes: the ability to handle a different maximum transmission unit (\textsc{mtu}) at each hop in a relay chain without losing packet-level authentication. It is a scale-invariant packet-authentication scheme, and it also has good memory use characteristics, due to a novel algorithm based on the ``Lackman'' scale-invariant tree-traversal pattern developed by the authors. A relay receiving packets of one size and emitting packets of another size only needs to hold one large packet in memory while streaming (e.\,g.\ if receiving 1 kiB packets and sending 16kiB packets, it only needs to store 16 kiB of packet data at a time). It can seamlessly handle any \textsc{mtu} that is one kilobyte, two kilobytes, or any power-of-two number of kilobytes above that, up to 128 MiB.
+This achieves a property that, to our knowledge, has not been demonstrated in prior packet authentication schemes: the ability to handle a different maximum transmission unit (\textsc{mtu}) at each hop in a relay chain without losing packet-level authentication. It is a scale-invariant packet-authentication scheme, and it also has good memory use characteristics, due to a novel algorithm based on the ``Lackman'' scale-invariant tree-traversal pattern developed by the authors. A relay receiving packets of one size and emitting packets of another size only needs to hold one large packet in memory while streaming (e.\,g.\ if receiving 1~kiB packets and sending 16kiB packets, it only needs to store 16~kiB of packet data at a time). It can seamlessly handle any \textsc{mtu} that is one kilobyte, two kilobytes, or any power-of-two number of kilobytes above that, up to 128~MiB.
 
 Another advantage of the Directed Messaging protocol is that much more of the logic can be offloaded from the Urbit operating system, Arvo, into the runtime. This enables decoupling between the formal
 specification, which is written in Nock, and implementation, which is written in C. This is in keeping with the spirit of Urbit's ``jet'' system that separates mechanism and policy for code execution. The most straightforward advantage of this decoupling is that each packet can be processed ephemerally, without incurring a disk write as in previous versions of Urbit's network protocol -- that was a severe bottleneck on the maximum throughput. The implementation in the runtime could be swapped out with another implementation written in another language, the congestion control algorithm could be swapped out, and parallelism strategies could readily be employed to increase multicore \textsc{cpu} utilization. The implementation that was deployed contains a major optimization: specialized arena allocators to reduce memory management overhead.
@@ -89,7 +89,7 @@ A network roundtrip is conceived of as a request, followed by a response. The re
 
 Over the network, a network request is a single \textsc{udp} packet that encodes a scry path, limited to 384 characters so the request packet always fits into the internet-standard 1500-byte \textsc{mtu} (maximum transmission unit). A scry response may consist of a single packet, or multiple packets, depending on the size of the datum bound to that path. If the datum is 1kiB or less, the response is encoded into a single \textsc{udp} packet. Otherwise, the first scry response packet contains only the first 1kiB of the datum, along with a fixed-width field containing the number of bits in the whole datum.
 
-If the subscriber ship receives a response indicating the datum is multi-packet, it switches modes and begins requesting the remainder of the datum, one kiB at a time. Each request for a kiB of data is itself a fully-fledged namespace read request, where the path in the request contains the path of the whole datum as well as the chunk size being requested (configured to 1 kiB over the public internet, but this could be increased to any power of 2 kiB's up to 128 MiB, for other environments, such as intra-datacenter). The protocol definition does not require those fragment requests to be sent in any particular order or according to any particular congestion control algorithm. The current implementation uses a packet-switched variant of the \textsc{tcp} NewReno congestion control algorithm, written in C in Urbit's runtime, to manage multi-packet reads. The message-level authentication is sent in the first response packet. Each subsequent packet is authenticated as being part of that message by using the LockStep streaming authentication scheme, described in a later section.
+If the subscriber ship receives a response indicating the datum is multi-packet, it switches modes and begins requesting the remainder of the datum, one~kiB at a time. Each request for a~kiB of data is itself a fully-fledged namespace read request, where the path in the request contains the path of the whole datum as well as the chunk size being requested (configured to 1~kiB over the public internet, but this could be increased to any power of 2~kiB's up to 128~MiB, for other environments, such as intra-datacenter). The protocol definition does not require those fragment requests to be sent in any particular order or according to any particular congestion control algorithm. The current implementation uses a packet-switched variant of the \textsc{tcp} NewReno congestion control algorithm, written in C in Urbit's runtime, to manage multi-packet reads. The message-level authentication is sent in the first response packet. Each subsequent packet is authenticated as being part of that message by using the LockStep streaming authentication scheme, described in a later section.
 
 This remote read flow is a ``pure read'': handling a read request does not require the publisher ship to change any persistent state. But a general-purpose network protocol needs to be able to express commands, not just reads. Directed Messaging builds commands out of reads. A command is conceived of as two reads, one in each direction:
 
@@ -100,16 +100,16 @@ This remote read flow is a ``pure read'': handling a read request does not requi
 \item  The ship that receives the command, after attempting to execute the command, makes the command's result available within its namespace, so the sending ship has the ability to read the result (hereafter called the ``ack'') by sending a remote read request. A result can be success (``ack'') or an error datum (``naxplanation'', named after ``nack'' for negative acknowledgment).
 \end{enumerate}
 
-This approach is conceptually clean but immediately presents two practical challenges. The first is triggering: how does the receiving ship \emph{know} to request the command datum from the sending ship? There are many ships on the network; it would be absurdly impractical to send requests to all of them on the off-chance that one or two of them have an outstanding command for us. The second challenge is latency: a naive implementation would imply every command requires two network roundtrips, one to remote-read the command and one to remote-read the command's result (ack or naxplanation). If so, that would be unfortunate, since Urbit's previous networking required only one roundtrip for a command and ack, in the common case of a small (≤ 1 kiB) command datum, and unneeded roundtrips are anathema to
+This approach is conceptually clean but immediately presents two practical challenges. The first is triggering: how does the receiving ship \emph{know} to request the command datum from the sending ship? There are many ships on the network; it would be absurdly impractical to send requests to all of them on the off-chance that one or two of them have an outstanding command for us. The second challenge is latency: a naive implementation would imply every command requires two network roundtrips, one to remote-read the command and one to remote-read the command's result (ack or naxplanation). If so, that would be unfortunate, since Urbit's previous networking required only one roundtrip for a command and ack, in the common case of a small (≤ 1~kiB) command datum, and unneeded roundtrips are anathema to
 a good user experience \citep{Cheshire1996}.
 
-Fortunately, we can solve both problems with one weird trick. We add a `request-type' bit to each network request packet indicating whether it is a read or a command, and if it is a command, it includes not only the scry request path, but also a scry response containing the first 1 kiB of the command datum. When the receiving ship's runtime receives the packet, it looks at the `request-type' bit to determine how to handle the packet.
+Fortunately, we can solve both problems with one weird trick. We add a `request-type' bit to each network request packet indicating whether it is a read or a command, and if it is a command, it includes not only the scry request path, but also a scry response containing the first 1~kiB of the command datum. When the receiving ship's runtime receives the packet, it looks at the `request-type' bit to determine how to handle the packet.
 
 If the incoming request packet is a read, the runtime performs a read request on the Arvo OS by firing its \lstinline[style=inlinecode]{+peek} arm, a Nock function that reads from Arvo's namespace. This read request does not trigger any disk writes and could be run in parallel with other reads and with an Arvo event. The runtime then encodes the result of this read as a scry response packet and sends it back to the IP and port that sent the request.
 
 If the packet is a command, the runtime injects the packet as a stateful Arvo ``event'' by firing its \lstinline[style=inlinecode]{+poke} arm (a Nock function that sends an event or command for Arvo to process, producing effects and a new Arvo OS with a modified state). When this event completes, one of the effects it produces can be a scry response packet containing the ack, which the runtime will send back to the IP and port that sent the request.
 
-If the command datum fits within 1 kiB, the entire command is sent in the first packet, recapturing the single-roundtrip flow for a command and an ack. Multi-packet commands are downloaded by the commanded ship using the same congestion control as downloading any other potentially large datum -- and, importantly, those incremental downloads do not necessarily trigger unnecessarily frequent disk writes.
+If the command datum fits within 1~kiB, the entire command is sent in the first packet, recapturing the single-roundtrip flow for a command and an ack. Multi-packet commands are downloaded by the commanded ship using the same congestion control as downloading any other potentially large datum -- and, importantly, those incremental downloads do not necessarily trigger unnecessarily frequent disk writes.
 
 \section{Routing}
 \label{routing}
@@ -211,172 +211,47 @@ route becomes unresponsive.
 \section{Authentication and
 Encryption}\label{authentication-and-encryption}
 
-Directed Messaging is always authenticated and it supports encryption,
-in a number of different modes: - \textbf{Unencrypted reads:} A ship can
-publish data into its namespace without encryption. Response messages
-are signed using the ship's private key. The signature attests to the
-scry binding: the pair of the scry path and the datum at that path. -
-\textbf{One-to-One Encrypted Reads:} A ship can make data available to a
-single peer ship. Response messages are authenticated via external \textsc{hmac}
-and internal signature. They are encrypted using a symmetric key derived
-from the Diffie-Hellman key exchange of the two ships' keys. -
-\textbf{Commands:} Commands and their acks are both handled as
-one-to-one encrypted reads. - \textbf{One-to-Many Encryption:} A ship
-can make data available to many ships by sharing an encryption key for
-that data to each ship using a one-to-one encrypted read. The requesting
-ship then uses that key to encrypt the request's scry path and decrypt
-the scry response.
+Directed Messaging is always authenticated and supports encryption in a number of different modes:
+\begin{itemize}
+  \item  \textbf{Unencrypted reads:} A ship can publish data into its namespace without encryption. Response messages are signed using the ship's private key. The signature attests to the scry binding: the pair of the scry path and the datum at that path.
+  \item  \textbf{One-to-One Encrypted Reads:} A ship can make data available to a
+single peer ship. Response messages are authenticated via external \textsc{hmac} and internal signature. They are encrypted using a symmetric key derived from the Diffie-Hellman key exchange of the two ships' keys.
+  \item \textbf{Commands:} Commands and their acks are both handled as one-to-one encrypted reads.
+  \item \textbf{One-to-Many Encryption:} A ship can make data available to many ships by sharing an encryption key for that data to each ship using a one-to-one encrypted read. The requesting ship then uses that key to encrypt the request's scry path and decrypt the scry response.
+\end{itemize}
 
-% The core encryption primitives are: - \texttt{kdf}: BLAKE3, in its key
-% derivation mode. - \texttt{crypt}: XChaCha8, with its 24-byte nonce derived by
-% processing the (arbitrary-length) input IV using ``kdf'' (with ``mesa-crypt-iv''
-% as the context string). Although ChaCha20 is the more popular variant, recent
-% analysis (TODO: cite "Too Much Crypto") convincingly argues that the additional
-% 12 rounds do not add any meaningful security margin, while reducing performance
-% by a factor of 2.5x.
+The core encryption primitives consist of:
 
-% Messages and their paths are encrypted separately. First, \texttt{kdf} is used
-% to derive an authentication key and encryption key from the shared secret. The
-% authentication key is used to compute a 128-bit keyed BLAKE3 hash of the path;
-% this serves as the AEAD tag. The encryption key is then used to encrypt the path
-% with \texttt{crypt}, using the tag as the IV. Concatenating the encrypted path
-% and authentication tag yields a ``sealed'' path. The message itself is then
-% encrypted with \texttt{crypt}, using the sealed path as the IV. Authentication
-% of the message is achieved via a Merkle hashing scheme described later.
+\begin{itemize}
+  \item  \texttt{kdf}: BLAKE3, in its key derivation mode.
+  \item  \texttt{crypt}: XChaCha8, with its 24-byte nonce derived by processing the (arbitrary-length) input initialization vector (IV) using the key derivation function (\texttt{kdf}) with \texttt{"mesa-crypt-iv"} as the context string.
+\end{itemize}
 
-% Because the scry namespace immutably binds paths to their message data, the path
-% serves as a synthetic IV for the message, making encryption deterministic. This
-% solves multiple problems: - It (along with other principles of Directed
-% Messaging) prevents replay attacks by construction. Every Directed Messaging
-% packet is idempotent at the application level (a duplicate packet can trigger a
-% duplicate ack and minor state changes in the runtime and Arvo kernel related to
-% routing state, but it cannot modify anything visible to an application). - It
-% removes the need for explicit nonce management, such as generating, storing, and
-% transmitting an explicit nonce for each message. Not tracking nonces reduces the
-% system's security attack surface area considerably, since nonce state
-% mismanagement is a common source of vulnerabilities. - Supporting encrypted
-% values in the namespace allows the system to implement encryption using overlay
-% namespaces (described in more detail below), which provide a clean layering that
-% separates encryption from other concerns.
+\noindent
+Messages and their paths are encrypted separately. First, \texttt{kdf} is used to derive an authentication key and encryption key from the shared secret. The authentication key is used to compute a 128-bit keyed BLAKE3 hash of the path; this serves as the Authenticated Encryption with Associated Data (\textsc{aead}) tag. The encryption key is then used to encrypt the path with \texttt{crypt}, using the tag as the IV. Concatenating the encrypted path and authentication tag yields a ``sealed'' path. The message itself is then encrypted with \texttt{crypt}, using the sealed path as the IV. Authentication of the message is achieved via a Merkle hashing scheme described later.
 
-% A note on serialization: before transmission, a single 0x1 byte is appended to
-% the encrypted message. This solves a representation problem specific to Urbit's
-% atom system. In Urbit, data is ultimately stored as ``atoms'':
-% arbitrary-precision natural numbers. The atom system cannot distinguish between
-% byte streams with equivalent numerical value; that is, it has no way to ``say'' 
-% 0x1000 instead of 0x1 or 0x1000000000---all are numerically equivalent to 1.
-% Thus, if a ciphertext happens to end with one or more zero bytes,
-% those would be stripped when the ciphertext is represented as an atom,
-% corrupting the data. Appending a 0x1 byte ensures that the atom representation
-% always preserves the full length of the ciphertext, including any trailing zeros.
-% During decryption, the code verifies that the final byte is indeed 0x1 (which
-% catches truncation or corruption) and then strips it before decrypting.
+Directed Messaging's encryption scheme uses a variant of ChaCha20, XChaCha, with reduced rounds for performance. XChaCha is an extended-nonce variant of ChaCha that accepts a 192-bit nonce instead of the standard 96-bit nonce. However, rather than using the caller-provided initialization vector directly as the nonce, Directed Messaging first applies a BLAKE3 key derivation function to derive a deterministic 24-byte nonce from the IV using the context string \texttt{"mesa-crypt-iv"}. This XChaCha operation with 8 rounds then produces a derived key and extended nonce, which are subsequently used for the actual ChaCha encryption (also with 8 rounds) of the message payload. The use of 8 rounds instead of the standard 20 is a performance optimization -- ChaCha's security margin allows for this reduction in cryptographic applications where the extreme paranoia of 20 rounds may be unnecessary \citep{Aumasson2019}, and the deterministic nonce derivation via BLAKE3 adds an additional layer of domain separation.
 
-All encryption is deterministic. This solves multiple problems: - It
-(along with other principles of Directed Messaging) prevents replay
-attacks by construciton. Every Directed Messaging packet is idempotent
-at the application level (a duplicate packet can trigger a duplicate ack
-and minor state changes in the runtime and Arvo kernel related to
-routing state, but it cannot modify anything visible to an application).
-- It allows encrypted values to be assigned paths in the scry namespace
-without maintaining nonce state for each encrypted value. Not tracking
-nonces reduces the system's security attack surface area considerably,
-since nonce state mismanagement is a common source of vulnerabilities. -
-Supporting encrypted values in the namespace allows the system to
-implement encryption using overlay namespaces (described in more detail
-below), which provide a clean layering that separates encryption from
-other concerns.
+Because the scry namespace immutably binds paths to their message data, the path serves as a synthetic IV for the message, making encryption deterministic. This solves multiple problems.  It (along with other principles of Directed Messaging) prevents replay attacks by construction. Every Directed Messaging packet is idempotent at the application level (a duplicate packet can trigger a duplicate ack and minor state changes in the runtime and Arvo kernel related to routing state, but it cannot modify anything visible to an application). It further removes the need for explicit nonce management, such as generating, storing, and transmitting an explicit nonce for each message. Not tracking nonces reduces the system's security attack surface area considerably, since nonce state mismanagement is a common source of vulnerabilities. Finally, supporting encrypted values in the namespace allows the system to implement encryption using overlay
+namespaces (described in more detail below), which provide a clean layering that separates encryption from other concerns.
 
-Directed Messaging's encryption scheme uses a variant of ChaCha20 with
-reduced rounds for performance. The process begins with XChaCha, an
-extended-nonce variant of ChaCha that accepts a 192-bit nonce instead of
-the standard 96-bit nonce. However, rather than using the
-caller-provided initialization vector directly as the nonce, Directed
-Messaging first applies a Blake3 key derivation function to derive a
-deterministic 24-byte nonce from the IV using the context string
-``mesa-crypt-iv''. This XChaCha operation with 8 rounds then produces a
-derived key and extended nonce, which are subsequently used for the
-actual ChaCha encryption (also with 8 rounds) of the message payload.
-The use of 8 rounds instead of the standard 20 is a performance
-optimization---ChaCha's security margin allows for this reduction in
-cryptographic applications where the extreme paranoia of 20 rounds may
-be unnecessary, and the deterministic nonce derivation via Blake3 adds
-an additional layer of domain separation. The encrypted output is then
-appended with a single 0x1 trailer byte that serves as a format marker,
-which the decryption process verifies before removing to recover the
-plaintext. This construction provides authenticated encryption
-properties through the deterministic relationship between the IV and
-nonce, ensuring that any tampering with the ciphertext or IV will result
-in decryption failure.
-
-The trailer byte solves a representation problem specific to Urbit's
-atom system. In Urbit, data is ultimately stored as atoms
-(arbitrary-precision integers), and atoms don't distinguish between
-0x1000 and 0x1000000000---trailing zero bytes are simply not part of the
-numeric value. If ciphertext happens to end with one or more zero bytes,
-those would be stripped when the ciphertext is represented as an atom,
-corrupting the data. By appending a single 0x1 byte to the end, Directed
-Messaging ensures that the atom representation always preserves the full
-length of the ciphertext including any trailing zeros. During
-decryption, the code verifies that the final byte is indeed 0x1 (which
-catches truncation or corruption) and then strips it before decrypting.
-It's purely a data representation concern, not a cryptographic
-feature---without it, you'd silently lose any ciphertext bytes that
-happen to be zero at the end.
-
-% A note on serialization: before transmission, a single 0x1 byte is appended to
-% the encrypted message. This solves a representation problem specific to Urbit's
-% atom system. In Urbit, data is ultimately stored as ``atoms'':
-% arbitrary-precision natural numbers. The atom system cannot distinguish between
-% byte streams with equivalent numerical value; that is, it has no way to ``say'' 
-% 0x1000 instead of 0x1 or 0x1000000000---all are numerically equivalent to 1.
-% Thus, if a ciphertext happens to end with one or more zero bytes,
-% those would be stripped when the ciphertext is represented as an atom,
-% corrupting the data. Appending a 0x1 byte ensures that the atom representation
-% always preserves the full length of the ciphertext, including any trailing zeros.
-% During decryption, the code verifies that the final byte is indeed 0x1 (which
-% catches truncation or corruption) and then strips it before decrypting.
-
+Before transmission, a single \texttt{0x1} byte is appended to the encrypted message, called a ``trailer byte''. This solves a representation problem specific to Urbit's atom system. In Urbit, data is ultimately stored as ``atoms'': arbitrary-precision natural numbers. The atom system cannot distinguish between byte streams with equivalent numerical value; that is, it has no way to ``say'' \texttt{0x1000} instead of \texttt{0x1} or \texttt{0x1000000000}---all are numerically equivalent to 1.\footnote{Note the relative most-significant byte (\textsc{msb}) order notation used here, contrary to Urbit's customary \textsc{lsb} order.} Thus, if a ciphertext happens to end with one or more zero bytes, those would be stripped when the ciphertext is represented as an atom, corrupting the data. Appending a 0x1 byte ensures that the atom representation always preserves the full length of the ciphertext, including any trailing zeros. During decryption, the code verifies that the final byte is indeed \texttt{0x1} (which catches truncation or corruption) and then strips it before decrypting.  This construction provides authenticated encryption properties through the deterministic relationship between the IV and nonce, ensuring that any tampering with the ciphertext or IV will result in decryption failure.
 
 \subsection{Message Authentication and Encryption
 Details}\label{message-authentication-and-encryption-details}
 
 \subsubsection{Overlay Namespaces}\label{overlay-namespaces}
 
-Each of the three privacy modes has its own ``overlay namespace'',
-i.\,e.\ a part of the scry namespace that somehow transforms values bound
-to a different part of the namespace. A path in an overlay namespace
-often consists of a path prefix containing the name of the overlay and
-any parameters needed for the transformation it performs on the datum at
-the overlaid path, followed by the overlaid path.
+Each of the three privacy modes has its own ``overlay namespace'', i.\,e.\ a part of the scry namespace that somehow transforms values bound to a different part of the namespace. A path in an overlay namespace often consists of a path prefix containing the name of the overlay and any parameters needed for the transformation it performs on the datum at the overlaid path, followed by the overlaid path.
 
-A handler function that deals with scry requests to the overlay
-namespace is free to parse transformation parameters out of the overlay
-prefix, inspect the overlaid path, make a scry request for the data at
-that path, make scry requests related to that path (such as existence
-checks for file paths), and run arbitrary code to transform the results.
-This is all possible because scry requests are purely functional by
-construction -- they are deterministic functions of their inputs, with
-no hidden inputs, and there is no mechanism by which they could change
-Arvo state.
+A handler function that deals with scry requests to the overlay namespace is free to parse transformation parameters out of the overlay prefix, inspect the overlaid path, make a scry request for the data at that path, make scry requests related to that path (such as existence checks for file paths), and run arbitrary code to transform the results. This is all possible because scry requests are purely functional by construction -- they are deterministic functions of their inputs, with no hidden inputs, and there is no mechanism by which they could change Arvo state.
 
-Directed Messaging uses overlay namespaces not only for privacy modes,
-but also to publish individual packets within a message. The packet's
-size (expressed as the log base 2 kiB, e.\,g.\ 3 for 8kiB or 4 for 15kiB)
-and fragment number (index within the message) are parameters to this
-overlay, which overlays the message's scry path.
+Directed Messaging uses overlay namespaces not only for privacy modes, but also to publish individual packets within a message. The packet's size (expressed as the log base 2~kiB, e.\,g.\ 3 for 8~kiB or 4 for 15~kiB) and fragment number (index within the message) are parameters to this overlay, which overlays the message's scry path.
 
-Directed Messaging is the first Urbit kernel module to make heavy use of
-overlay namespaces in its design. They play an important role in
-maintaining boundaries between layers within the system: privacy is
-separated, by construction, from other concerns due to the isolation
-imposed by overlay namespaces. For example, an application can declare
-what privacy mode it wants to use for a piece of data it publishes, and
-the kernel enforces that by exposing it over the network using the
-appropriate overlay namespace.
+Directed Messaging is the first Urbit kernel module to make heavy use of overlay namespaces in its design. They play an important role in maintaining boundaries between layers within the system: privacy is separated, by construction, from other concerns due to the isolation imposed by overlay namespaces. For example, an application can declare what privacy mode it wants to use for a piece of data it publishes, and the kernel enforces that by exposing it over the network using the appropriate overlay namespace.
 
-\subsubsection{\%publ namespace (unencrypted
-public)}\label{publ-namespace-unencrypted-public}
+\subsubsection[\texttt{\%publ} namespace (unencrypted public)]{\texttt{\%publ} namespace (unencrypted public)}
+\label{publ-namespace-unencrypted-public}
 
 Authentication: Ed25519 signature only (no encryption)
 
@@ -413,21 +288,11 @@ Authentication: Ed25519 signature only (no encryption)
 
 The \texttt{\%publ} namespace uses unencrypted paths with the structure:
 
-\texttt{/publ/{[}life{]}/{[}path{]}}
+\begin{lstlisting}[style=listingblock]
+/publ/[life]/[path]
+\end{lstlisting}
 
-Components:
-
-\begin{enumerate}
-\def\labelenumi{\arabic{enumi}.}
-\tightlist
-\item
-  life: The life (key revision number) of the publisher's networking
-  keys, used to identify which public key to use for signature
-  verification.
-\item
-  path: The actual user path in plaintext. This is not encrypted and is
-  visible to all network observers.
-\end{enumerate}
+in which \lstinline[style=inlinecode]{life} (key revision number) of the publisher's networking keys is used to identify which public key to use for signature verification; and \lstinline[style=inlinecode]{path} is the actual user path in plaintext.  This is not encrypted and is visible to all network observers.
 
 Privacy properties:
 
@@ -458,8 +323,8 @@ Use cases:
   distribution is required
 \end{itemize}
 
-\subsubsection{\%shut namespace (group
-encrypted)}\label{shut-namespace-group-encrypted}
+\subsubsection{\texttt{\%shut} namespace (group encrypted)}
+\label{shut-namespace-group-encrypted}
 
 Authentication: Ed25519 signature over encrypted data
 
@@ -502,7 +367,7 @@ Authentication: Ed25519 signature over encrypted data
   signatures.
 \end{enumerate}
 
-The \%shut namespace uses encrypted paths with the structure:
+The \lstinline[style=inlinecode]{%shut} namespace uses encrypted paths with the structure:
 
 \texttt{/shut/{[}key-id{]}/{[}encrypted-path{]}}
 
@@ -525,74 +390,37 @@ Components:
 Privacy properties:
 
 \begin{itemize}
-\tightlist
-\item
-  The actual content path is hidden from network observers and
-  unauthorized parties
-\item
-  Only the key ID is visible in plaintext
-\item
-  The group key must be obtained separately (typically via a \%keen
-  task) to decrypt both the path and the message payload
-\item
-  Different groups using different key IDs can coexist without revealing
-  which content is being accessed
+  \item  The actual content path is hidden from network observers and unauthorized parties
+  \item  Only the key ID is visible in plaintext.
+  \item  The group key must be obtained separately (typically via a \lstinline[style=inlinecode]{%keen} to decrypt both the path and the message payload.
+  \item  Different groups using different key IDs can coexist without revealing which content is being accessed.
 \end{itemize}
 
-\subsubsection{\%chum namespace (1-to-1
-encrypted)}\label{chum-namespace-1-to-1-encrypted}
+\subsubsection{\texttt{\%chum} namespace (1-to-1 encrypted)}
+\label{chum-namespace-1-to-1-encrypted}
 
 Authentication: \textsc{hmac} only (no signatures)
 
 \begin{enumerate}
-\def\labelenumi{\arabic{enumi}.}
-\tightlist
-\item
-  Message encryption: The message is encrypted with XChaCha20-8 using a
-  symmetric key derived from Curve25519 \textsc{ecdh} key exchange between the
-  two ships' networking keys.
-\item
-  \textsc{hmac} authentication: A 16-byte \textsc{hmac} (Blake3 keyed hash) is computed
-  over:
+  \item  Message encryption: The message is encrypted with XChaCha20-8 using a symmetric key derived from Curve25519 \textsc{ecdh} key exchange between the two ships' networking keys.
+  \item  \textsc{hmac} authentication: A 16-byte \textsc{hmac} (BLAKE3 keyed hash) is computed over:
+    \begin{itemize}
+      \item  The encoded beam path.
+      \item  The \textsc{lss} root of the encrypted data.
+    \end{itemize}
+  \item  Shared symmetric key: Both \textsc{hmac} computation and encryption use the same \textsc{ecdh}-derived symmetric key. Both parties can independently derive this key from their own private key and the other party's public key.
+  \item  Verification: The receiver verifies the \textsc{hmac} using the shared symmetric key, then decrypts with the same key.
+  \item  Security model: The \textsc{hmac} proves the sender possesses the shared symmetric key (implicitly authenticating them as the expected peer). No signatures are needed since only two parties share this key. This applies to both pokes and acks.
 \end{enumerate}
 
-\begin{itemize}
-\tightlist
-\item
-  The encoded beam path
-\item
-  The \textsc{lss} root of the encrypted data
-\end{itemize}
-
-\begin{enumerate}
-\def\labelenumi{\arabic{enumi}.}
-\setcounter{enumi}{2}
-\tightlist
-\item
-  Shared symmetric key: Both \textsc{hmac} computation and encryption use the
-  same \textsc{ecdh}-derived symmetric key. Both parties can independently derive
-  this key from their own private key and the other party's public key.
-\item
-  Verification: The receiver verifies the \textsc{hmac} using the shared
-  symmetric key, then decrypts with the same key.
-\item
-  Security model: The \textsc{hmac} proves the sender possesses the shared
-  symmetric key (implicitly authenticating them as the expected peer).
-  No signatures are needed since only two parties share this key. This
-  applies to both pokes and acks.
-\end{enumerate}
-
-The \%chum namespace uses encrypted paths with the structure:
+The \lstinline[style=inlinecode]{%chum} namespace uses encrypted paths with the structure:
 
 \texttt{/chum/{[}server-life{]}/{[}client-ship{]}/{[}client-life{]}/{[}encrypted-path{]}}
 
 Components:
 
 \begin{enumerate}
-\def\labelenumi{\arabic{enumi}.}
-\tightlist
-\item
-  server-life: The life (key revision number) of the server ship's
+  \item  server-life: The life (key revision number) of the server ship's
   networking keys, used to identify which version of their keys to use
   for \textsc{ecdh} key derivation.
 \item
@@ -636,8 +464,7 @@ TODO: more closely match the tone of the rest of this document TODO:
 more diagrams, clearer explanation of Lackman traversal
 
 One of the goals of Directed Messaging was to improve upon the
-safe-but-dumb ``sign every 1 KiB packet'' design of old \texttt{\%ames}.
-The standard approach is to use asymmetric crypto to establish a shared \textsc{aead} key, and use it to authenticate each packet. This is just as safe as signing every packet, and orders of magnitude faster. However, we still can't verify that a peer is sending us \emph{correct} data until we've received the entire message. They could send us 999 good packets and 1 bad one, and we'd have no way of knowing which was which. This is especially annoying if we want to download in parallel from multiple peers: if the final result is invalid, which peer is to blame? If we want to solve this problem, we need to get a little more bespoke.
+safe-but-dumb ``sign every 1 KiB packet'' design of old \lstinline[style=inlinecode]{%ames}. The standard approach is to use asymmetric crypto to establish a shared \textsc{aead} key, and use it to authenticate each packet. This is just as safe as signing every packet, and orders of magnitude faster. However, we still can't verify that a peer is sending us \emph{correct} data until we've received the entire message. They could send us 999 good packets and 1 bad one, and we'd have no way of knowing which was which. This is especially annoying if we want to download in parallel from multiple peers: if the final result is invalid, which peer is to blame? If we want to solve this problem, we need to get a little more bespoke.
 
 Verifying that a packet belongs to a particular message is a job for a Merkle tree. So our protocol needs to split message data into the leaves of a tree, and send both leaf data and tree hashes. Early on, we debated whether to make these distinct request types; we settled on interleaving them. Now the question becomes: which tree hashes do you need to send, and when do you send them?
 
@@ -834,14 +661,14 @@ These store lane addresses for pending requests, with the arena holding
 the entry itself plus a linked list of address records.
 
 \textbf{Pending requests} allocate arenas at \textbf{5× the expected
-message size}. A request receiving a 1 MiB message gets a 5 MiB arena.
+message size}. A request receiving a 1~MiB message gets a 5~MiB arena.
 This single arena holds the request state, fragment data buffer, \textsc{lss}
 authentication pairs, packet statistics, bitset tracking received
 fragments, and pre-serialized request packets.
 
 \textbf{Jumbo frame cache entries} allocate based on proof size, data
-size, hash pairs, plus a 2KB buffer. For a 1 MiB message, this might be
-around 1-2 MiB. The arena stores the cached response data, Merkle proof
+size, hash pairs, plus a 2KB buffer. For a 1~MiB message, this might be
+around 1-2~MiB. The arena stores the cached response data, Merkle proof
 spine, and authentication hashes.
 
 \textbf{Temporary arenas} for packet sending use message size plus 16KB
