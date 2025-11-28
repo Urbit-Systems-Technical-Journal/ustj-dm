@@ -328,38 +328,7 @@ Directed Messaging is the first Urbit kernel module to make heavy use of overlay
 \subsubsection[\texttt{\%publ} namespace (unencrypted public)]{\texttt{\%publ} namespace (unencrypted public)}
 \label{publ-namespace-unencrypted-public}
 
-Authentication: Ed25519 signature only (no encryption)
-
-\begin{enumerate}
-\def\labelenumi{\arabic{enumi}.}
-\tightlist
-\item
-  No encryption: The message data is jammed but not encrypted. The
-  serialized response is sent in plaintext.
-\item
-  Signature authentication: A 64-byte Ed25519 signature is computed
-  over:
-\end{enumerate}
-
-\begin{itemize}
-\tightlist
-\item
-  The encoded beam path
-\item
-  The \textsc{lss} root of the unencrypted jammed data
-\end{itemize}
-
-\begin{enumerate}
-\def\labelenumi{\arabic{enumi}.}
-\setcounter{enumi}{2}
-\tightlist
-\item
-  Publisher's signing key: The signature uses the publisher's Ed25519
-  private key (extracted from their networking key).
-\item
-  Verification: The receiver verifies the signature using the
-  publisher's Ed25519 public key retrieved from Azimuth.
-\end{enumerate}
+A value registered in the \lstinline[style=inlinecode]{%publ} namespace is intended to be publicly readable by anyone on the network.  The message is not encrypted, but it is authenticated using signature authentication only (using a 64-byte Ed25519 signature calculated over the encoded beam path and the \textsc{lss} root of the unencrypted jammed data).  The publisher signs the message using their Ed25519 private key (extracted from their networking key), and the receiver verifies the signature using the publisher's Ed25519 public key retrieved from Azimuth.  In this model, authenticity is provided by the signature, while confidentiality is not provided since the message is sent in plaintext.
 
 The \texttt{\%publ} namespace uses unencrypted paths with the structure:
 
@@ -368,22 +337,15 @@ The \texttt{\%publ} namespace uses unencrypted paths with the structure:
 \end{lstlisting}
 
 \noindent
-in which \lstinline[style=inlinecode]{life} (key revision number) of the publisher's networking keys is used to identify which public key to use for signature verification; and \lstinline[style=inlinecode]{path} is the actual user path in plaintext.  This is not encrypted and is visible to all network observers.
+with the components:
+\begin{itemize}
+  \item  \lstinline[style=inlinecode]{life} (key revision number) of the publisher's networking keys is used to identify which public key to use for signature verification.
+  \item  \lstinline[style=inlinecode]{path} is the actual user path in plaintext.  This is not encrypted and is visible to all network observers.
+\end{itemize}
 
 Everything in the \lstinline[style=inlinecode]{%publ} namespace is public:  both the publisher's identity/key version and the content path are visible to anyone. No encryption is applied to either the path or the message payload. Authentication comes solely from the Ed25519 signature, which proves the publisher created this content. Key rotation is supported through the life counter.
 
-Its use cases include:
-
-\begin{itemize}
-\tightlist
-\item
-  Public data that should be readable by anyone
-\item
-  Content where authenticity matters but confidentiality doesn't
-\item
-  Simpler than encrypted namespaces since no key exchange or group key
-  distribution is required
-\end{itemize}
+Its use cases include public data that should be readable by anyone, content where authenticity matters but confidentiality doesn't, and scenarios where simplicity is preferred over the complexity of encrypted namespaces (since no key exchange or group key distribution is required).
 
 \subsubsection{\texttt{\%shut} namespace (group encrypted)}
 \label{shut-namespace-group-encrypted}
@@ -398,11 +360,10 @@ The \lstinline[style=inlinecode]{%shut} namespace uses encrypted paths with the 
 
 \noindent
 with the components:
-
-\begin{enumerate}
+\begin{itemize}
   \item  \lstinline[style=inlinecode]{key-id}: A numeric identifier indicating which group symmetric key to use for decryption. This allows multiple groups to be supported, each with their own key.
   \item  \lstinline[style=inlinecode]{encrypted-path}: The actual user path, encrypted using the group key.  This is sealed with the same symmetric key used to encrypt the message payload, making the entire scry path opaque to anyone without the group key.
-\end{enumerate}
+\end{itemize}
 
 \noindent
 The actual content path is hidden from network observers. Only the key ID is visible in plaintext.  The group key must be obtained separately (typically via a \lstinline[style=inlinecode]{%keen} task) to decrypt both the path and the message payload. Different groups using different key IDs can coexist without revealing which content is being accessed.
@@ -420,11 +381,10 @@ The \lstinline[style=inlinecode]{%chum} namespace uses encrypted paths with stru
 \end{lstlisting}
 
 \noindent
-in which the components are:
-
+with the components:
 \begin{itemize}
   \item  \lstinline[style=inlinecode]{server-life}: The life (key revision number) of the server ship's networking keys, used to identify which version of their keys to use for \textsc{ecdh} key derivation.
-  \item  \lstinline[style=inlinecode]{client-ship}: The @p address of the client ship in the communication pair.
+  \item  \lstinline[style=inlinecode]{client-ship}: The \texttt{@p} address of the client ship in the communication pair.
   \item  \lstinline[style=inlinecode]{client-life}: The life of the client ship's networking keys, used to identify which version of their keys to use for \textsc{ecdh} key derivation.
   \item  \lstinline[style=inlinecode]{encrypted-path}: The actual user path, encrypted using the symmetric \textsc{ecdh} key derived from both ships' networking keys. This makes the scry path opaque to network observers.
 \end{itemize}
@@ -448,142 +408,423 @@ conservative safe-but-dumb ``sign every 1~KiB packet'' design of old Ames.\footn
 
 Verifying that a packet belongs to a particular message is a job for a Merkle tree. So our protocol needs to split message data into the leaves of a tree, and send both leaf data and tree hashes. Early on, we debated whether to make these distinct request types; we settled on interleaving them. Now the question becomes: which tree hashes do you need to send, and when do you send them?
 
-Our relevant design constraints were as follows:
-
-\begin{itemize}
+The relevant design constraints were:
+\begin{enumerate}
   \item  Sufficiently-small messages should not require more than one packet.
   \item  It should be possible to download in parallel.
   \item  The protocol should be flexible with respect to the size of a leaf.
-\end{itemize}
+\end{enumerate}
 
 \noindent
 An obvious first place to look for inspiration was \href{https://github.com/oconnor663/bao}{Bao} \citep{oconnor663}. However, Bao is not very amenable to being split into fixed-size packets: it intermingles leaf data and tree hashes into one stream, and the number of consecutive hashes varies based on the offset. You could modify it such that each packet consists of a leaf followed by at most one hash; indeed, this was the initial plan. Visually:
 
-\begin{Verbatim}[formatcom=\ttfamily, fontsize=\small]
-                       ┌──────────────┴─────────────a
-           ┌───────────┴───────────b              ┌─┴─q
-     ┌─────┴─────c           ┌─────┴─────j        │   │
-  ┌──┴──d     ┌──┴──g     ┌──┴──k     ┌──┴──n     │   │
-┌─┴─e ┌─┴─f ┌─┴─h ┌─┴─i ┌─┴─l ┌─┴─m ┌─┴─o ┌─┴─p ┌─┴─r │
-0   1 2   3 4   5 6   7 8   9 10 11 12 13 14 15 16 17 18
-\end{Verbatim}
+%                        ┌──────────────┴─────────────a
+%            ┌───────────┴───────────b              ┌─┴─q
+%      ┌─────┴─────c           ┌─────┴─────j        │   │
+%   ┌──┴──d     ┌──┴──g     ┌──┴──k     ┌──┴──n     │   │
+% ┌─┴─e ┌─┴─f ┌─┴─h ┌─┴─i ┌─┴─l ┌─┴─m ┌─┴─o ┌─┴─p ┌─┴─r │
+% 0   1 2   3 4   5 6   7 8   9 10 11 12 13 14 15 16 17 18
 
-\begin{figure}[htp]
-  \centering
+\noindent
+\hspace{3pt}
 \begin{tikzpicture}[
-  every node/.style={inner sep=2pt},
-  level/.style={sibling distance=5mm/#1},
-  edge from parent/.style={draw, thick},
-  % vertical distance between rows
-  % level distance=12mm,
-  % horizontal distance between leaves
-  % leaf dist=9mm,
+  x=0.05\textwidth,
+  y=1cm,
 ]
+  \coordinate (root) at (12.5, 3.0) {};
 
-% Leaves (0 to 18)
-\foreach \i in {0,...,18}
-  \node at (\i*0.9,0) {\ttfamily\small \i};
+  \coordinate(al) at (7.5, 2.5) {};
+  \coordinate(ac) at (12.5, 2.5) {};
+  \coordinate (ar) at (17.25, 2.5) {};
 
-% Helper to draw a ┴ or └ or ┌ connector at a given x-position and height
-\newcommand\branch[3]{% #1 = x, #2 = height, #3 = type (L, T, or corner)
-  \ifnum#3=0 \draw[thick] (#1,#2-0.4) -- (#1,#2); \fi               % vertical drop
-  \ifnum#3=1 \draw[thick] (#1-0.45,#2) -- (#1+0.45,#2); \fi       % horizontal bar for T
-  \ifnum#3=2 \draw[thick] (#1-0.45,#2) -- (#1,#2); \fi             % left L
-  \ifnum#3=3 \draw[thick] (#1,#2) -- (#1+0.45,#2); \fi             % right L
-}
+  \coordinate (bl) at (3.5, 2.0) {};
+  \coordinate (bc) at (7.5, 2.0) {};
+  \coordinate (br) at (11.5, 2.0) {};
+  \coordinate (ql) at (16.5, 2.0) {};
+  \coordinate (qc) at (17.25, 2.0) {};
+  \coordinate (qr) at (18, 2.0) {};
 
-% === Row heights (from bottom up) ===
-% height 0 = leaves
-% height 1 = e,f,h,i,l,m,o,p,r
-% height 2 = d,g,k,n
-% height 3 = c,j
-% height 4 = b
-% height 5 = root
+  \coordinate (cl) at (1.5, 1.5) {};
+  \coordinate (cc) at (3.5, 1.5) {};
+  \coordinate (cr) at (5.5, 1.5) {};
+  \coordinate (jl) at (9.5, 1.5) {};
+  \coordinate (jc) at (11.5, 1.5) {};
+  \coordinate (jr) at (13.5, 1.5) {};
 
-% height 1
-\branch{0.0}{1}{2}   \node at (0.0,1)   {e};
-\branch{1.8}{1}{3}   \node at (1.8,1)   {f};
-\branch{3.6}{1}{2}   \node at (3.6,1)   {h};
-\branch{5.4}{1}{3}   \node at (5.4,1)   {i};
-\branch{7.2}{1}{2}   \node at (7.2,1)   {l};
-\branch{9.0}{1}{3}   \node at (9.0,1)   {m};
-\branch{10.8}{1}{2}  \node at (10.8,1)  {o};
-\branch{12.6}{1}{3}  \node at (12.6,1)  {p};
-\branch{15.3}{1}{2}  \node at (15.3,1)  {r};
+  \coordinate (dl) at (0.5, 1.0) {};
+  \coordinate (dc) at (1.5, 1.0) {};
+  \coordinate (dr) at (2.5, 1.0) {};
+  \coordinate (gl) at (4.5, 1.0) {};
+  \coordinate (gc) at (5.5, 1.0) {};
+  \coordinate (gr) at (6.5, 1.0) {};
+  \coordinate (kl) at (8.5, 1.0) {};
+  \coordinate (kc) at (9.5, 1.0) {};
+  \coordinate (kr) at (10.5, 1.0) {};
+  \coordinate (nl) at (12.5, 1.0) {};
+  \coordinate (nc) at (13.5, 1.0) {};
+  \coordinate (nr) at (14.5, 1.0) {};
 
-% height 2
-\branch{0.9}{2}{1}   \node at (0.9,2)   {d};
-\branch{4.5}{2}{1}   \node at (4.5,2)   {g};
-\branch{8.1}{2}{1}   \node at (8.1,2)   {k};
-\branch{11.7}{2}{1}  \node at (11.7,2)  {n};
+  \coordinate (el) at (0, 0.5) {};
+  \coordinate (ec) at (0.5, 0.5) {};
+  \coordinate (er) at (1, 0.5) {};
+  \coordinate (fl) at (2, 0.5) {};
+  \coordinate (fc) at (2.5, 0.5) {};
+  \coordinate (fr) at (3, 0.5) {};
+  \coordinate (hl) at (4, 0.5) {};
+  \coordinate (hc) at (4.5, 0.5) {};
+  \coordinate (hr) at (5, 0.5) {};
+  \coordinate (il) at (6, 0.5) {};
+  \coordinate (ic) at (6.5, 0.5) {};
+  \coordinate (ir) at (7, 0.5) {};
+  \coordinate (ll) at (8, 0.5) {};
+  \coordinate (lc) at (8.5, 0.5) {};
+  \coordinate (lr) at (9, 0.5) {};
+  \coordinate (ml) at (10, 0.5) {};
+  \coordinate (mc) at (10.5, 0.5) {};
+  \coordinate (mr) at (11, 0.5) {};
+  \coordinate (ol) at (12, 0.5) {};
+  \coordinate (oc) at (12.5, 0.5) {};
+  \coordinate (or) at (13, 0.5) {};
+  \coordinate (pl) at (14, 0.5) {};
+  \coordinate (pc) at (14.5, 0.5) {};
+  \coordinate (pr) at (15, 0.5) {};
+  \coordinate (rl) at (16, 0.5) {};
+  \coordinate (rc) at (16.5, 0.5) {};
+  \coordinate (rr) at (17, 0.5) {};
 
-% height 3
-\branch{2.7}{3}{1}   \node at (2.7,3)   {c};
-\branch{9.9}{3}{1}   \node at (9.9,3)   {j};
+  \node[draw=none] (n0) at (0,0) {\texttt{0}};
+  \node[draw=none] (n1) at (1,0) {\texttt{1}};
+  \node[draw=none] (n2) at (2,0) {\texttt{2}};
+  \node[draw=none] (n3) at (3,0) {\texttt{3}};
+  \node[draw=none] (n4) at (4,0) {\texttt{4}};
+  \node[draw=none] (n5) at (5,0) {\texttt{5}};
+  \node[draw=none] (n6) at (6,0) {\texttt{6}};
+  \node[draw=none] (n7) at (7,0) {\texttt{7}};
+  \node[draw=none] (n8) at (8,0) {\texttt{8}};
+  \node[draw=none] (n9) at (9,0) {\texttt{9}};
+  \node[draw=none] (n10) at (10,0) {\texttt{10}};
+  \node[draw=none] (n11) at (11,0) {\texttt{11}};
+  \node[draw=none] (n12) at (12,0) {\texttt{12}};
+  \node[draw=none] (n13) at (13,0) {\texttt{13}};
+  \node[draw=none] (n14) at (14,0) {\texttt{14}};
+  \node[draw=none] (n15) at (15,0) {\texttt{15}};
+  \node[draw=none] (n16) at (16,0) {\texttt{16}};
+  \node[draw=none] (n17) at (17,0) {\texttt{17}};
+  \node[draw=none] (n18) at (18,0) {\texttt{18}};
 
-% height 4
-\branch{6.3}{4}{1}   \node at (6.3,4)   {b};
+  \draw[thick] (root) -| (ac);
+  \draw[thick] (ac) -| (al);
+  \draw[thick] (al) -| (bc);
+  \draw[thick] (ac) -| (ar);
+  \draw[thick] (ar) -| (qc);
+  \draw[thick] (bc) -| (bl);
+  \draw[thick] (bl) -| (cc);
+  \draw[thick] (bc) -| (br);
+  \draw[thick] (br) -| (jc);
+  \draw[thick] (qc) -| (ql);
+  \draw[thick] (ql) -| (rc);
+  \draw[thick] (qc) -| (qr);
+  \draw[thick] (qr) -| (n18);
+  \draw[thick] (cc) -| (cl);
+  \draw[thick] (cl) -| (dc);
+  \draw[thick] (cc) -| (cr);
+  \draw[thick] (cr) -| (gc);
+  \draw[thick] (jc) -| (jl);
+  \draw[thick] (jl) -| (kc);
+  \draw[thick] (jc) -| (jr);
+  \draw[thick] (jr) -| (nc);
+  \draw[thick] (dc) -| (dl);
+  \draw[thick] (dl) -| (ec);
+  \draw[thick] (dc) -| (dr);
+  \draw[thick] (dr) -| (fc);
+  \draw[thick] (gc) -| (gl);
+  \draw[thick] (gl) -| (hc);
+  \draw[thick] (gc) -| (gr);
+  \draw[thick] (gr) -| (ic);
+  \draw[thick] (kr) -| (kl);
+  \draw[thick] (kc) -| (kl);
+  \draw[thick] (kl) -| (lc);
+  \draw[thick] (kc) -| (kr);
+  \draw[thick] (kr) -| (mc);
+  \draw[thick] (nc) -| (nl);
+  \draw[thick] (nl) -| (oc);
+  \draw[thick] (nc) -| (nr);
+  \draw[thick] (nr) -| (pc);
+  \draw[thick] (ec) -| (el);
+  \draw[thick] (el) -| (n0);
+  \draw[thick] (ec) -| (er);
+  \draw[thick] (er) -| (n1);
+  \draw[thick] (fc) -| (fl);
+  \draw[thick] (fl) -| (n2);
+  \draw[thick] (fc) -| (fr);
+  \draw[thick] (fr) -| (n3);
+  \draw[thick] (hc) -| (hl);
+  \draw[thick] (hl) -| (n4);
+  \draw[thick] (hc) -| (hr);
+  \draw[thick] (hr) -| (n5);
+  \draw[thick] (ic) -| (il);
+  \draw[thick] (il) -| (n6);
+  \draw[thick] (ic) -| (ir);
+  \draw[thick] (ir) -| (n7);
+  \draw[thick] (lc) -| (ll);
+  \draw[thick] (ll) -| (n8);
+  \draw[thick] (lc) -| (lr);
+  \draw[thick] (lr) -| (n9);
+  \draw[thick] (mc) -| (ml);
+  \draw[thick] (ml) -| (n10);
+  \draw[thick] (mc) -| (mr);
+  \draw[thick] (mr) -| (n11);
+  \draw[thick] (oc) -| (ol);
+  \draw[thick] (ol) -| (n12);
+  \draw[thick] (oc) -| (or);
+  \draw[thick] (or) -| (n13);
+  \draw[thick] (pc) -| (pl);
+  \draw[thick] (pl) -| (n14);
+  \draw[thick] (pc) -| (pr);
+  \draw[thick] (pr) -| (n15);
+  \draw[thick] (rc) -| (rl);
+  \draw[thick] (rl) -| (n16);
+  \draw[thick] (rc) -| (rr);
+  \draw[thick] (rr) -| (n17);
 
-% height 5 — root
-\draw[thick] (6.3,4.6) -- (6.3,5);
-\draw[thick] (0,5) -- (15.3,5);
-\node at (15.3,5) {a};
-\draw[thick] (15.3,5) -- (15.3,4.4);
-\draw[thick] (13.5,5) -- (13.5,3.4);  % direct line from root down to q’s level
-\node at (13.5,3) {q};
-
-% vertical lines from height 1 → 2
-\draw[thick] (0.0,1) -- (0.0,1.6);
-\draw[thick] (1.8,1) -- (1.8,1.6);
-\draw[thick] (3.6,1) -- (3.6,1.6);
-\draw[thick] (5.4,1) -- (5.4,1.6);
-\draw[thick] (7.2,1) -- (7.2,1.6);
-\draw[thick] (9.0,1) -- (9.0,1.6);
-\draw[thick] (10.8,1)-- (10.8,1.6);
-\draw[thick] (12.6,1)-- (12.6,1.6);
-\draw[thick] (15.3,1)-- (15.3,1.6);
-
-% vertical lines from height 2 → 3
-\draw[thick] (0.9,2)--(0.9,2.6);
-\draw[thick] (4.5,2)--(4.5,2.6);
-\draw[thick] (8.1,2)--(8.1,2.6);
-\draw[thick] (11.7,2)--(11.7,2.6);
-
-% vertical lines from height 3 → 4
-\draw[thick] (2.7,3)--(2.7,3.6);
-\draw[thick] (9.9,3)--(9.9,3.6);
-
-% vertical lines from height 4 → 5
-\draw[thick] (6.3,4)--(6.3,4.6);
-
+  \node[draw=none, fill=white, inner sep=2pt] at (ar) {\texttt{a}};
+  \node[draw=none, fill=white, inner sep=2pt] at (br) {\texttt{b}};
+  \node[draw=none, fill=white, inner sep=2pt] at (qr) {\texttt{q}};
+  \node[draw=none, fill=white, inner sep=2pt] at (cr) {\texttt{c}};
+  \node[draw=none, fill=white, inner sep=2pt] at (jr) {\texttt{j}};
+  \node[draw=none, fill=white, inner sep=2pt] at (dr) {\texttt{d}};
+  \node[draw=none, fill=white, inner sep=2pt] at (gr) {\texttt{g}};
+  \node[draw=none, fill=white, inner sep=2pt] at (kr) {\texttt{k}};
+  \node[draw=none, fill=white, inner sep=2pt] at (nr) {\texttt{n}};
+  \node[draw=none, fill=white, inner sep=2pt] at (er) {\texttt{e}};
+  \node[draw=none, fill=white, inner sep=2pt] at (fr) {\texttt{f}};
+  \node[draw=none, fill=white, inner sep=2pt] at (hr) {\texttt{h}};
+  \node[draw=none, fill=white, inner sep=2pt] at (ir) {\texttt{i}};
+  \node[draw=none, fill=white, inner sep=2pt] at (lr) {\texttt{l}};
+  \node[draw=none, fill=white, inner sep=2pt] at (mr) {\texttt{m}};
+  \node[draw=none, fill=white, inner sep=2pt] at (or) {\texttt{o}};
+  \node[draw=none, fill=white, inner sep=2pt] at (pr) {\texttt{p}};
+  \node[draw=none, fill=white, inner sep=2pt] at (rr) {\texttt{r}};
 \end{tikzpicture}
-  \caption{.}
-  \label{fig:tree-1}
-\end{figure}
 
+This is a \href{https://eprint.iacr.org/2021/038}{binary numeral tree}: a structure composed of perfect binary trees, imposed upon a flat sequence of bytes. The numbers 0--18 represent leaf data (typically 1~KiB per leaf), while letters \lstinline[style=inlinecode]{a}--\lstinline[style=inlinecode]{r} represents tree hashes that are used to verify the leaves. So packet 3 would contain bytes 3072--4096 and leaf hash \lstinline[style=inlinecode]{d}.
 
-This is a \href{https://eprint.iacr.org/2021/038}{binary numeral tree}: a structure composed of perfect binary trees, imposed upon a flat sequence of bytes. The numbers 0-18 represent leaf data (typically 1~KiB per leaf), while letters \emph{a}-\emph{r} represents tree hashes that are used to verify the leaves. So packet 3 would contain bytes 3072--4096 and leaf hash \emph{d}.
-
-The main problem with this approach is that it requires buffering. In order to verify leaf 0, we need hashes \emph{a} through \emph{e} -- five packets! Worse, once we've received five packets, we have the whole \texttt{{[}0,4)} subtree, making hashes \emph{d} and \emph{e} redundant. (In \textsc{bnt}s, we use the notation \texttt{{[}n,m)} to refer to the perfect subtree containing leaves \texttt{n} through \texttt{m-1}.)
+The main problem with this approach is that it requires buffering. In order to verify leaf 0, we need hashes \lstinline[style=inlinecode]{a} through \lstinline[style=inlinecode]{e} -- five packets! Worse, once we've received five packets, we have the whole \lstinline[style=inlinecode]{[0,4)} subtree, making hashes \lstinline[style=inlinecode]{d} and \lstinline[style=inlinecode]{e} redundant. (In \textsc{bnt}s, we use the notation \lstinline[style=inlinecode]{[n,m)} to refer to the perfect subtree containing leaves \lstinline[style=inlinecode]{n} through \lstinline[style=inlinecode]{m-1}.)
 
 Buffering a few packets is not the end of the world, but the whole thing had kind of a bad smell to it. We asked: what would happen if we added another constraint?
 
-\begin{itemize}
+% start counting at 4
+\begin{enumerate}
+  \setcounter{enumi}{3}
   \item  It should be possible to validate each packet as soon as it arrives, with no buffering.
-\end{itemize}
+\end{enumerate}
 
-For starters, an inescapable consequence of this constraint is that we must send the \emph{full} Merkle proof for the first leaf before we can send the leaf data itself. Also, we can no longer send hashes that can't be immediately verified. For example, to verify \emph{g}, we first need to have verified \emph{c}; we can then combine \emph{g} with its sibling hash and confirm that the result matches \emph{c}.
+For starters, an inescapable consequence of this constraint is that we must send the \emph{full} Merkle proof for the first leaf before we can send the leaf data itself. Also, we can no longer send hashes that can't be immediately verified. For example, to verify \lstinline[style=inlinecode]{g}, we first need to have verified \lstinline[style=inlinecode]{c}; we can then combine \lstinline[style=inlinecode]{g} with its sibling hash and confirm that the result matches \lstinline[style=inlinecode]{c}.
 
 While adding another constraint seems like it would make our life harder, in reality the opposite happened: the protocol was greatly simplified. It turns out that by front-loading the initial proof hashes, we ensure that the received leaf data and hashes will never ``run ahead'' of what can be immediately verified. Here's what it looks like in practice:
 
-\begin{Verbatim}[formatcom=\ttfamily, fontsize=\small]
-                       ┌──────────────┴─────────────*
-           ┌───────────┴───────────*              l─┴─l
-     ┌─────┴─────*           e─────┴─────e        │   │
-  ┌──┴──*     b──┴──b     f──┴──f     i──┴──i     │   │
-*─┴─* a─┴─a c─┴─c d─┴─d g─┴─g h─┴─h j─┴─j k─┴─k m─┴─m │
-0   1 2   3 4   5 6   7 8   9 10 11 12 13 14 15 16 17 18
-\end{Verbatim}
+%                        ┌──────────────┴─────────────*
+%            ┌───────────┴───────────*              l─┴─l
+%      ┌─────┴─────*           e─────┴─────e        │   │
+%   ┌──┴──*     b──┴──b     f──┴──f     i──┴──i     │   │
+% *─┴─* a─┴─a c─┴─c d─┴─d g─┴─g h─┴─h j─┴─j k─┴─k m─┴─m │
+% 0   1 2   3 4   5 6   7 8   9 10 11 12 13 14 15 16 17 18
+
+\noindent
+\hspace{3pt}
+\begin{tikzpicture}[
+  x=0.05\textwidth,
+  y=1cm,
+]
+  \coordinate (root) at (12.5, 3.0) {};
+
+  \coordinate(al) at (7.5, 2.5) {};
+  \coordinate(ac) at (12.5, 2.5) {};
+  \coordinate (ar) at (17.25, 2.5) {};
+
+  \coordinate (bl) at (3.5, 2.0) {};
+  \coordinate (bc) at (7.5, 2.0) {};
+  \coordinate (br) at (11.5, 2.0) {};
+  \coordinate (ql) at (16.5, 2.0) {};
+  \coordinate (qc) at (17.25, 2.0) {};
+  \coordinate (qr) at (18, 2.0) {};
+
+  \coordinate (cl) at (1.5, 1.5) {};
+  \coordinate (cc) at (3.5, 1.5) {};
+  \coordinate (cr) at (5.5, 1.5) {};
+  \coordinate (jl) at (9.5, 1.5) {};
+  \coordinate (jc) at (11.5, 1.5) {};
+  \coordinate (jr) at (13.5, 1.5) {};
+
+  \coordinate (dl) at (0.5, 1.0) {};
+  \coordinate (dc) at (1.5, 1.0) {};
+  \coordinate (dr) at (2.5, 1.0) {};
+  \coordinate (gl) at (4.5, 1.0) {};
+  \coordinate (gc) at (5.5, 1.0) {};
+  \coordinate (gr) at (6.5, 1.0) {};
+  \coordinate (kl) at (8.5, 1.0) {};
+  \coordinate (kc) at (9.5, 1.0) {};
+  \coordinate (kr) at (10.5, 1.0) {};
+  \coordinate (nl) at (12.5, 1.0) {};
+  \coordinate (nc) at (13.5, 1.0) {};
+  \coordinate (nr) at (14.5, 1.0) {};
+
+  \coordinate (el) at (0, 0.5) {};
+  \coordinate (ec) at (0.5, 0.5) {};
+  \coordinate (er) at (1, 0.5) {};
+  \coordinate (fl) at (2, 0.5) {};
+  \coordinate (fc) at (2.5, 0.5) {};
+  \coordinate (fr) at (3, 0.5) {};
+  \coordinate (hl) at (4, 0.5) {};
+  \coordinate (hc) at (4.5, 0.5) {};
+  \coordinate (hr) at (5, 0.5) {};
+  \coordinate (il) at (6, 0.5) {};
+  \coordinate (ic) at (6.5, 0.5) {};
+  \coordinate (ir) at (7, 0.5) {};
+  \coordinate (ll) at (8, 0.5) {};
+  \coordinate (lc) at (8.5, 0.5) {};
+  \coordinate (lr) at (9, 0.5) {};
+  \coordinate (ml) at (10, 0.5) {};
+  \coordinate (mc) at (10.5, 0.5) {};
+  \coordinate (mr) at (11, 0.5) {};
+  \coordinate (ol) at (12, 0.5) {};
+  \coordinate (oc) at (12.5, 0.5) {};
+  \coordinate (or) at (13, 0.5) {};
+  \coordinate (pl) at (14, 0.5) {};
+  \coordinate (pc) at (14.5, 0.5) {};
+  \coordinate (pr) at (15, 0.5) {};
+  \coordinate (rl) at (16, 0.5) {};
+  \coordinate (rc) at (16.5, 0.5) {};
+  \coordinate (rr) at (17, 0.5) {};
+
+  \node[draw=none] (n0) at (0,0) {\texttt{0}};
+  \node[draw=none] (n1) at (1,0) {\texttt{1}};
+  \node[draw=none] (n2) at (2,0) {\texttt{2}};
+  \node[draw=none] (n3) at (3,0) {\texttt{3}};
+  \node[draw=none] (n4) at (4,0) {\texttt{4}};
+  \node[draw=none] (n5) at (5,0) {\texttt{5}};
+  \node[draw=none] (n6) at (6,0) {\texttt{6}};
+  \node[draw=none] (n7) at (7,0) {\texttt{7}};
+  \node[draw=none] (n8) at (8,0) {\texttt{8}};
+  \node[draw=none] (n9) at (9,0) {\texttt{9}};
+  \node[draw=none] (n10) at (10,0) {\texttt{10}};
+  \node[draw=none] (n11) at (11,0) {\texttt{11}};
+  \node[draw=none] (n12) at (12,0) {\texttt{12}};
+  \node[draw=none] (n13) at (13,0) {\texttt{13}};
+  \node[draw=none] (n14) at (14,0) {\texttt{14}};
+  \node[draw=none] (n15) at (15,0) {\texttt{15}};
+  \node[draw=none] (n16) at (16,0) {\texttt{16}};
+  \node[draw=none] (n17) at (17,0) {\texttt{17}};
+  \node[draw=none] (n18) at (18,0) {\texttt{18}};
+
+  \draw[thick] (root) -| (ac);
+  \draw[thick] (ac) -| (al);
+  \draw[thick] (al) -| (bc);
+  \draw[thick] (ac) -| (ar);
+  \draw[thick] (ar) -| (qc);
+  \draw[thick] (bc) -| (bl);
+  \draw[thick] (bl) -| (cc);
+  \draw[thick] (bc) -| (br);
+  \draw[thick] (br) -| (jc);
+  \draw[thick] (qc) -| (ql);
+  \draw[thick] (ql) -| (rc);
+  \draw[thick] (qc) -| (qr);
+  \draw[thick] (qr) -| (n18);
+  \draw[thick] (cc) -| (cl);
+  \draw[thick] (cl) -| (dc);
+  \draw[thick] (cc) -| (cr);
+  \draw[thick] (cr) -| (gc);
+  \draw[thick] (jc) -| (jl);
+  \draw[thick] (jl) -| (kc);
+  \draw[thick] (jc) -| (jr);
+  \draw[thick] (jr) -| (nc);
+  \draw[thick] (dc) -| (dl);
+  \draw[thick] (dl) -| (ec);
+  \draw[thick] (dc) -| (dr);
+  \draw[thick] (dr) -| (fc);
+  \draw[thick] (gc) -| (gl);
+  \draw[thick] (gl) -| (hc);
+  \draw[thick] (gc) -| (gr);
+  \draw[thick] (gr) -| (ic);
+  \draw[thick] (kr) -| (kl);
+  \draw[thick] (kc) -| (kl);
+  \draw[thick] (kl) -| (lc);
+  \draw[thick] (kc) -| (kr);
+  \draw[thick] (kr) -| (mc);
+  \draw[thick] (nc) -| (nl);
+  \draw[thick] (nl) -| (oc);
+  \draw[thick] (nc) -| (nr);
+  \draw[thick] (nr) -| (pc);
+  \draw[thick] (ec) -| (el);
+  \draw[thick] (el) -| (n0);
+  \draw[thick] (ec) -| (er);
+  \draw[thick] (er) -| (n1);
+  \draw[thick] (fc) -| (fl);
+  \draw[thick] (fl) -| (n2);
+  \draw[thick] (fc) -| (fr);
+  \draw[thick] (fr) -| (n3);
+  \draw[thick] (hc) -| (hl);
+  \draw[thick] (hl) -| (n4);
+  \draw[thick] (hc) -| (hr);
+  \draw[thick] (hr) -| (n5);
+  \draw[thick] (ic) -| (il);
+  \draw[thick] (il) -| (n6);
+  \draw[thick] (ic) -| (ir);
+  \draw[thick] (ir) -| (n7);
+  \draw[thick] (lc) -| (ll);
+  \draw[thick] (ll) -| (n8);
+  \draw[thick] (lc) -| (lr);
+  \draw[thick] (lr) -| (n9);
+  \draw[thick] (mc) -| (ml);
+  \draw[thick] (ml) -| (n10);
+  \draw[thick] (mc) -| (mr);
+  \draw[thick] (mr) -| (n11);
+  \draw[thick] (oc) -| (ol);
+  \draw[thick] (ol) -| (n12);
+  \draw[thick] (oc) -| (or);
+  \draw[thick] (or) -| (n13);
+  \draw[thick] (pc) -| (pl);
+  \draw[thick] (pl) -| (n14);
+  \draw[thick] (pc) -| (pr);
+  \draw[thick] (pr) -| (n15);
+  \draw[thick] (rc) -| (rl);
+  \draw[thick] (rl) -| (n16);
+  \draw[thick] (rc) -| (rr);
+  \draw[thick] (rr) -| (n17);
+
+  \node[draw=none, fill=white, inner sep=2pt] at (el) {\texttt{*}};
+  \node[draw=none, fill=white, inner sep=2pt] at (er) {\texttt{*}};
+  \node[draw=none, fill=white, inner sep=2pt] at (fl) {\texttt{a}};
+  \node[draw=none, fill=white, inner sep=2pt] at (fr) {\texttt{a}};
+  \node[draw=none, fill=white, inner sep=2pt] at (hl) {\texttt{c}};
+  \node[draw=none, fill=white, inner sep=2pt] at (hr) {\texttt{c}};
+  \node[draw=none, fill=white, inner sep=2pt] at (il) {\texttt{d}};
+  \node[draw=none, fill=white, inner sep=2pt] at (ir) {\texttt{d}};
+  \node[draw=none, fill=white, inner sep=2pt] at (ll) {\texttt{g}};
+  \node[draw=none, fill=white, inner sep=2pt] at (lr) {\texttt{g}};
+  \node[draw=none, fill=white, inner sep=2pt] at (ml) {\texttt{h}};
+  \node[draw=none, fill=white, inner sep=2pt] at (mr) {\texttt{h}};
+  \node[draw=none, fill=white, inner sep=2pt] at (ol) {\texttt{j}};
+  \node[draw=none, fill=white, inner sep=2pt] at (or) {\texttt{j}};
+  \node[draw=none, fill=white, inner sep=2pt] at (pl) {\texttt{k}};
+  \node[draw=none, fill=white, inner sep=2pt] at (pr) {\texttt{k}};
+  \node[draw=none, fill=white, inner sep=2pt] at (rl) {\texttt{m}};
+  \node[draw=none, fill=white, inner sep=2pt] at (rr) {\texttt{m}};
+  \node[draw=none, fill=white, inner sep=2pt] at (dr) {\texttt{*}};
+  \node[draw=none, fill=white, inner sep=2pt] at (cr) {\texttt{*}};
+  \node[draw=none, fill=white, inner sep=2pt] at (br) {\texttt{*}};
+  \node[draw=none, fill=white, inner sep=2pt] at (ar) {\texttt{*}};
+  \node[draw=none, fill=white, inner sep=2pt] at (gl) {\texttt{b}};
+  \node[draw=none, fill=white, inner sep=2pt] at (gr) {\texttt{b}};
+  \node[draw=none, fill=white, inner sep=2pt] at (kl) {\texttt{f}};
+  \node[draw=none, fill=white, inner sep=2pt] at (kr) {\texttt{f}};
+  \node[draw=none, fill=white, inner sep=2pt] at (jl) {\texttt{e}};
+  \node[draw=none, fill=white, inner sep=2pt] at (jr) {\texttt{e}};
+  \node[draw=none, fill=white, inner sep=2pt] at (nl) {\texttt{i}};
+  \node[draw=none, fill=white, inner sep=2pt] at (nr) {\texttt{i}};
+  \node[draw=none, fill=white, inner sep=2pt] at (ql) {\texttt{l}};
+  \node[draw=none, fill=white, inner sep=2pt] at (qr) {\texttt{l}};
+\end{tikzpicture}
 
 In the initial packet, we send the Merkle proof for leaf 0, i.\,e.\ all of the hashes marked with \texttt{*}. Each subsequent packet contains leaf data (leaf 0, 1, 2, etc.), and possibly a ``pair'' (\lstinline[style=inlinecode]{a}, \lstinline[style=inlinecode]{b}, \lstinline[style=inlinecode]{c}, etc.), which comprises \emph{both} child hashes under a particular node. Packet-by-packet, the verifier sees:
 
@@ -610,14 +851,208 @@ At each step, we ``consume'' two hashes (one to verify a leaf, one to verify a p
 
 This is a solid improvement! We dubbed it ``Lockstep Streaming,'' after the fact that verification proceeds in lockstep with packet receipt. But when we sat down to write the code for matching verified-but-unused hashes to incoming leaves and pairs, things got hairy. It was clearly \emph{possible}, but the ugliness of the logic suggested that there was a better way. And after filling plenty of notebook pages with hand-drawn Merkle trees, \patp{rovnys-ricfer} found it: a mapping of packet numbers to hash pairs that was not only much cleaner, but also \emph{scale invariant}. It's called Blackman ordering, and it looks like this:
 
-\begin{Verbatim}[formatcom=\ttfamily, fontsize=\small]
-                       ┌──────────────┴─────────────*
-           ┌───────────┴───────────*              h─┴─h
-     ┌─────┴─────*           d─────┴─────d        │   │
-  ┌──┴──*     b──┴──b     f──┴──f     j──┴──j     │   │
-*─┴─* a─┴─a c─┴─c e─┴─e g─┴─g i─┴─i k─┴─k m─┴─m o─┴─o │
-0   1 2   3 4   5 6   7 8   9 10 11 12 13 14 15 16 17 18
-\end{Verbatim}
+%                        ┌──────────────┴─────────────*
+%            ┌───────────┴───────────*              h─┴─h
+%      ┌─────┴─────*           d─────┴─────d        │   │
+%   ┌──┴──*     b──┴──b     f──┴──f     j──┴──j     │   │
+% *─┴─* a─┴─a c─┴─c e─┴─e g─┴─g i─┴─i k─┴─k m─┴─m o─┴─o │
+% 0   1 2   3 4   5 6   7 8   9 10 11 12 13 14 15 16 17 18
+
+\noindent
+\hspace{3pt}
+\begin{tikzpicture}[
+  x=0.05\textwidth,
+  y=1cm,
+]
+  \coordinate (root) at (12.5, 3.0) {};
+
+  \coordinate(al) at (7.5, 2.5) {};
+  \coordinate(ac) at (12.5, 2.5) {};
+  \coordinate (ar) at (17.25, 2.5) {};
+
+  \coordinate (bl) at (3.5, 2.0) {};
+  \coordinate (bc) at (7.5, 2.0) {};
+  \coordinate (br) at (11.5, 2.0) {};
+  \coordinate (ql) at (16.5, 2.0) {};
+  \coordinate (qc) at (17.25, 2.0) {};
+  \coordinate (qr) at (18, 2.0) {};
+
+  \coordinate (cl) at (1.5, 1.5) {};
+  \coordinate (cc) at (3.5, 1.5) {};
+  \coordinate (cr) at (5.5, 1.5) {};
+  \coordinate (jl) at (9.5, 1.5) {};
+  \coordinate (jc) at (11.5, 1.5) {};
+  \coordinate (jr) at (13.5, 1.5) {};
+
+  \coordinate (dl) at (0.5, 1.0) {};
+  \coordinate (dc) at (1.5, 1.0) {};
+  \coordinate (dr) at (2.5, 1.0) {};
+  \coordinate (gl) at (4.5, 1.0) {};
+  \coordinate (gc) at (5.5, 1.0) {};
+  \coordinate (gr) at (6.5, 1.0) {};
+  \coordinate (kl) at (8.5, 1.0) {};
+  \coordinate (kc) at (9.5, 1.0) {};
+  \coordinate (kr) at (10.5, 1.0) {};
+  \coordinate (nl) at (12.5, 1.0) {};
+  \coordinate (nc) at (13.5, 1.0) {};
+  \coordinate (nr) at (14.5, 1.0) {};
+
+  \coordinate (el) at (0, 0.5) {};
+  \coordinate (ec) at (0.5, 0.5) {};
+  \coordinate (er) at (1, 0.5) {};
+  \coordinate (fl) at (2, 0.5) {};
+  \coordinate (fc) at (2.5, 0.5) {};
+  \coordinate (fr) at (3, 0.5) {};
+  \coordinate (hl) at (4, 0.5) {};
+  \coordinate (hc) at (4.5, 0.5) {};
+  \coordinate (hr) at (5, 0.5) {};
+  \coordinate (il) at (6, 0.5) {};
+  \coordinate (ic) at (6.5, 0.5) {};
+  \coordinate (ir) at (7, 0.5) {};
+  \coordinate (ll) at (8, 0.5) {};
+  \coordinate (lc) at (8.5, 0.5) {};
+  \coordinate (lr) at (9, 0.5) {};
+  \coordinate (ml) at (10, 0.5) {};
+  \coordinate (mc) at (10.5, 0.5) {};
+  \coordinate (mr) at (11, 0.5) {};
+  \coordinate (ol) at (12, 0.5) {};
+  \coordinate (oc) at (12.5, 0.5) {};
+  \coordinate (or) at (13, 0.5) {};
+  \coordinate (pl) at (14, 0.5) {};
+  \coordinate (pc) at (14.5, 0.5) {};
+  \coordinate (pr) at (15, 0.5) {};
+  \coordinate (rl) at (16, 0.5) {};
+  \coordinate (rc) at (16.5, 0.5) {};
+  \coordinate (rr) at (17, 0.5) {};
+
+  \node[draw=none] (n0) at (0,0) {\texttt{0}};
+  \node[draw=none] (n1) at (1,0) {\texttt{1}};
+  \node[draw=none] (n2) at (2,0) {\texttt{2}};
+  \node[draw=none] (n3) at (3,0) {\texttt{3}};
+  \node[draw=none] (n4) at (4,0) {\texttt{4}};
+  \node[draw=none] (n5) at (5,0) {\texttt{5}};
+  \node[draw=none] (n6) at (6,0) {\texttt{6}};
+  \node[draw=none] (n7) at (7,0) {\texttt{7}};
+  \node[draw=none] (n8) at (8,0) {\texttt{8}};
+  \node[draw=none] (n9) at (9,0) {\texttt{9}};
+  \node[draw=none] (n10) at (10,0) {\texttt{10}};
+  \node[draw=none] (n11) at (11,0) {\texttt{11}};
+  \node[draw=none] (n12) at (12,0) {\texttt{12}};
+  \node[draw=none] (n13) at (13,0) {\texttt{13}};
+  \node[draw=none] (n14) at (14,0) {\texttt{14}};
+  \node[draw=none] (n15) at (15,0) {\texttt{15}};
+  \node[draw=none] (n16) at (16,0) {\texttt{16}};
+  \node[draw=none] (n17) at (17,0) {\texttt{17}};
+  \node[draw=none] (n18) at (18,0) {\texttt{18}};
+
+  \draw[thick] (root) -| (ac);
+  \draw[thick] (ac) -| (al);
+  \draw[thick] (al) -| (bc);
+  \draw[thick] (ac) -| (ar);
+  \draw[thick] (ar) -| (qc);
+  \draw[thick] (bc) -| (bl);
+  \draw[thick] (bl) -| (cc);
+  \draw[thick] (bc) -| (br);
+  \draw[thick] (br) -| (jc);
+  \draw[thick] (qc) -| (ql);
+  \draw[thick] (ql) -| (rc);
+  \draw[thick] (qc) -| (qr);
+  \draw[thick] (qr) -| (n18);
+  \draw[thick] (cc) -| (cl);
+  \draw[thick] (cl) -| (dc);
+  \draw[thick] (cc) -| (cr);
+  \draw[thick] (cr) -| (gc);
+  \draw[thick] (jc) -| (jl);
+  \draw[thick] (jl) -| (kc);
+  \draw[thick] (jc) -| (jr);
+  \draw[thick] (jr) -| (nc);
+  \draw[thick] (dc) -| (dl);
+  \draw[thick] (dl) -| (ec);
+  \draw[thick] (dc) -| (dr);
+  \draw[thick] (dr) -| (fc);
+  \draw[thick] (gc) -| (gl);
+  \draw[thick] (gl) -| (hc);
+  \draw[thick] (gc) -| (gr);
+  \draw[thick] (gr) -| (ic);
+  \draw[thick] (kr) -| (kl);
+  \draw[thick] (kc) -| (kl);
+  \draw[thick] (kl) -| (lc);
+  \draw[thick] (kc) -| (kr);
+  \draw[thick] (kr) -| (mc);
+  \draw[thick] (nc) -| (nl);
+  \draw[thick] (nl) -| (oc);
+  \draw[thick] (nc) -| (nr);
+  \draw[thick] (nr) -| (pc);
+  \draw[thick] (ec) -| (el);
+  \draw[thick] (el) -| (n0);
+  \draw[thick] (ec) -| (er);
+  \draw[thick] (er) -| (n1);
+  \draw[thick] (fc) -| (fl);
+  \draw[thick] (fl) -| (n2);
+  \draw[thick] (fc) -| (fr);
+  \draw[thick] (fr) -| (n3);
+  \draw[thick] (hc) -| (hl);
+  \draw[thick] (hl) -| (n4);
+  \draw[thick] (hc) -| (hr);
+  \draw[thick] (hr) -| (n5);
+  \draw[thick] (ic) -| (il);
+  \draw[thick] (il) -| (n6);
+  \draw[thick] (ic) -| (ir);
+  \draw[thick] (ir) -| (n7);
+  \draw[thick] (lc) -| (ll);
+  \draw[thick] (ll) -| (n8);
+  \draw[thick] (lc) -| (lr);
+  \draw[thick] (lr) -| (n9);
+  \draw[thick] (mc) -| (ml);
+  \draw[thick] (ml) -| (n10);
+  \draw[thick] (mc) -| (mr);
+  \draw[thick] (mr) -| (n11);
+  \draw[thick] (oc) -| (ol);
+  \draw[thick] (ol) -| (n12);
+  \draw[thick] (oc) -| (or);
+  \draw[thick] (or) -| (n13);
+  \draw[thick] (pc) -| (pl);
+  \draw[thick] (pl) -| (n14);
+  \draw[thick] (pc) -| (pr);
+  \draw[thick] (pr) -| (n15);
+  \draw[thick] (rc) -| (rl);
+  \draw[thick] (rl) -| (n16);
+  \draw[thick] (rc) -| (rr);
+  \draw[thick] (rr) -| (n17);
+
+  \node[draw=none, fill=white, inner sep=2pt] at (el) {\texttt{*}};
+  \node[draw=none, fill=white, inner sep=2pt] at (er) {\texttt{*}};
+  \node[draw=none, fill=white, inner sep=2pt] at (fl) {\texttt{a}};
+  \node[draw=none, fill=white, inner sep=2pt] at (fr) {\texttt{a}};
+  \node[draw=none, fill=white, inner sep=2pt] at (hl) {\texttt{c}};
+  \node[draw=none, fill=white, inner sep=2pt] at (hr) {\texttt{c}};
+  \node[draw=none, fill=white, inner sep=2pt] at (il) {\texttt{e}};
+  \node[draw=none, fill=white, inner sep=2pt] at (ir) {\texttt{e}};
+  \node[draw=none, fill=white, inner sep=2pt] at (ll) {\texttt{g}};
+  \node[draw=none, fill=white, inner sep=2pt] at (lr) {\texttt{g}};
+  \node[draw=none, fill=white, inner sep=2pt] at (ml) {\texttt{i}};
+  \node[draw=none, fill=white, inner sep=2pt] at (mr) {\texttt{i}};
+  \node[draw=none, fill=white, inner sep=2pt] at (ol) {\texttt{k}};
+  \node[draw=none, fill=white, inner sep=2pt] at (or) {\texttt{k}};
+  \node[draw=none, fill=white, inner sep=2pt] at (pl) {\texttt{m}};
+  \node[draw=none, fill=white, inner sep=2pt] at (pr) {\texttt{m}};
+  \node[draw=none, fill=white, inner sep=2pt] at (rl) {\texttt{o}};
+  \node[draw=none, fill=white, inner sep=2pt] at (rr) {\texttt{o}};
+  \node[draw=none, fill=white, inner sep=2pt] at (dr) {\texttt{*}};
+  \node[draw=none, fill=white, inner sep=2pt] at (cr) {\texttt{*}};
+  \node[draw=none, fill=white, inner sep=2pt] at (br) {\texttt{*}};
+  \node[draw=none, fill=white, inner sep=2pt] at (ar) {\texttt{*}};
+  \node[draw=none, fill=white, inner sep=2pt] at (gl) {\texttt{b}};
+  \node[draw=none, fill=white, inner sep=2pt] at (gr) {\texttt{b}};
+  \node[draw=none, fill=white, inner sep=2pt] at (kl) {\texttt{f}};
+  \node[draw=none, fill=white, inner sep=2pt] at (kr) {\texttt{f}};
+  \node[draw=none, fill=white, inner sep=2pt] at (jl) {\texttt{d}};
+  \node[draw=none, fill=white, inner sep=2pt] at (jr) {\texttt{d}};
+  \node[draw=none, fill=white, inner sep=2pt] at (nl) {\texttt{j}};
+  \node[draw=none, fill=white, inner sep=2pt] at (nr) {\texttt{j}};
+  \node[draw=none, fill=white, inner sep=2pt] at (ql) {\texttt{h}};
+  \node[draw=none, fill=white, inner sep=2pt] at (qr) {\texttt{h}};
+\end{tikzpicture}
 
 See the difference? Instead of ordering the pairs on a first-needed basis, we jump around a bit. Specifically, we send a pair whose ``height'' corresponds to the number of trailing zeroes in the binary representation of the packet number. For example, packet 4 is \lstinline[style=inlinecode]{0b100} in binary, with two trailing zeroes, so we send pair d, which sits two levels above the leaves.\footnote{As you might expect, the logic gets slightly less clean when the number of leaves is not a power of two, but it's hardly catastrophic.} Here is a packet-by-packet verification for Blackman ordering:
 
@@ -1670,26 +2105,11 @@ The implementation of Directed Messaging maintained the interface to the rest of
 \section{Conclusion}
 \label{conclusion}
 
-Directed Messaging provides a secure, efficient, and robust mechanism for requesting and receiving large messages in the Urbit network. By leveraging Lockstep Streaming for packet authentication and a modified \textsc{tcp}-like congestion control algorithm, it achieves high throughput while maintaining data integrity and resilience to network conditions. The protocol's design reflects Urbit's architectural principles of pull-based communication, implicit acknowledgment, and per-peer state management. Directed Messaging represents a significant advancement over previous messaging protocols in Urbit, enabling applications to reliably transfer large amounts of data across the decentralized network.\tombstone
+Directed Messaging provides a secure, efficient, and robust mechanism for requesting and receiving large messages in the Urbit network. By leveraging Lockstep Streaming for packet authentication and a modified \textsc{tcp}-like congestion control algorithm, it achieves high throughput while maintaining data integrity and resilience to network conditions. The protocol's design reflects Urbit's architectural principles of pull-based communication, implicit acknowledgment, and per-peer state management.
 
-\section{Future Work}\label{future-work}
+In fact, Azimuth's design, particularly star-based routing, suggests that star relaying and star scry caching could further enhance Directed Messaging's performance and reliability in a future development cycle.  Download checkpointing and resumption could be fully supported by relays, as well as a fast retransmit mechanism integrated into the congestion control algorithm.  Support for the ``sticky scry'' mechanism (\textsc{uip}-0100) and \lstinline[style=inlinecode]{%pine} scry-at-latest (\textsc{uip}-0121) will eventually round out a full pub-sub system built on top of Directed Messaging.
 
-TODO not sure what to include here
-@TED why don't we drop this section and work anything else into the main body and anything speculative into a conclusion?
-
-\begin{itemize}
-\item
-  star relaying
-\item
-  star scry caching
-\item
-  download checkpointing and resumption
-\item
-  add fast retransmit to congestion control
-\end{itemize}
-
-speculative: - add \%pine - add sticky scry Those together would flesh
-out a full pub-sub system with stateless publishers
+Directed Messaging represents a significant advancement over previous messaging protocols in Urbit, enabling applications to reliably transfer large amounts of data across the decentralized network.\tombstone
 
 \selectlanguage{USenglish}
 \printbibliography
