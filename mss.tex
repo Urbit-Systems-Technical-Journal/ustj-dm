@@ -40,8 +40,8 @@
 \fancyhead{}
 \fancyfoot[L]{{\footnotesize
               %% We toggle between these:
-              Manuscript submitted for review.\\
-              % {\it Urbit Systems Technical Journal} I:1 (2024):  1–3. \\
+              % Manuscript submitted for review.\\
+              {\it Urbit Systems Technical Journal} III:1 (2026):  1–41. \\
               ~ \\
               Address author correspondence to \patp{rovnys-ricfer}.
               }}
@@ -321,7 +321,7 @@ Each of the three privacy modes has its own ``overlay namespace'', i.\,e.\ a par
 
 A handler function that deals with scry requests to the overlay namespace is free to parse transformation parameters out of the overlay prefix, inspect the overlaid path, make a scry request for the data at that path, make scry requests related to that path (such as existence checks for file paths), and run arbitrary code to transform the results. This is all possible because scry requests are purely functional by construction -- they are deterministic functions of their inputs, with no hidden inputs, and there is no mechanism by which they could change Arvo state.
 
-Directed Messaging uses overlay namespaces not only for privacy modes, but also to publish individual packets within a message. The packet's size (expressed as the log base 2~kiB, e.\,g.\ 3 for 8~kiB or 4 for 15~kiB) and fragment number (index within the message) are parameters to this overlay, which overlays the message's scry path.
+Directed Messaging uses overlay namespaces not only for privacy modes, but also to publish individual packets within a message. The packet's size (expressed as the log base 2~kiB, e.\,g.\ 3 for 8~kiB or 4 for 16~kiB) and fragment number (index within the message) are parameters to this overlay, which overlays the message's scry path.
 
 Directed Messaging is the first Urbit kernel module to make heavy use of overlay namespaces in its design. They play an important role in maintaining boundaries between layers within the system: privacy is separated, by construction, from other concerns due to the isolation imposed by overlay namespaces. For example, an application can declare what privacy mode it wants to use for a piece of data it publishes, and the kernel enforces that by exposing it over the network using the appropriate overlay namespace.
 
@@ -350,7 +350,7 @@ Its use cases include public data that should be readable by anyone, content whe
 \subsubsection{\texttt{\%shut} namespace (group encrypted)}
 \label{shut-namespace-group-encrypted}
 
-In contrast, the \lstinline[style=inlinecode]{%shut} namespace is intended for one-to-many encrypted data sharing, wherein a publisher ship shares data with a group of ships by encrypting the data with a shared symmetric key known to the group.  The message is encrypted with XChaCha20-8 using this group symmetric key.  The key is provided via the \lstinline[style=inlinecode]{%keen} task (not derived from \textsc{ecdh}).  The encrypted path indicates which group key to use.  Signature authentication takes place using a 64-byte Ed25519 signature computed over the encoded beam path and the \textsc{lss} root of the encrypted data.  The signature uses the publisher's Ed25519 private key, proving that the publisher created this encrypted payload.  The receiver verifies the signature using the publisher's Ed25519 public key from Azimuth, then decrypts with the group key.  In this security model, the signature proves authenticity from the publisher, while encryption provides confidentiality to group members.  Anyone with the group key can decrypt, but only the publisher can create valid signatures.
+In contrast, the \lstinline[style=inlinecode]{%shut} namespace is intended for one-to-many encrypted data sharing, wherein a publisher ship shares data with a group of ships by encrypting the data with a shared symmetric key known to the group.  The message is encrypted with XChaCha8 using this group symmetric key.  The key is provided via the \lstinline[style=inlinecode]{%keen} task (not derived from \textsc{ecdh}).  The encrypted path indicates which group key to use.  Signature authentication takes place using a 64-byte Ed25519 signature computed over the encoded beam path and the \textsc{lss} root of the encrypted data.  The signature uses the publisher's Ed25519 private key, proving that the publisher created this encrypted payload.  The receiver verifies the signature using the publisher's Ed25519 public key from Azimuth, then decrypts with the group key.  In this security model, the signature proves authenticity from the publisher, while encryption provides confidentiality to group members.  Anyone with the group key can decrypt, but only the publisher can create valid signatures.
 
 The \lstinline[style=inlinecode]{%shut} namespace uses encrypted paths with the structure:
 
@@ -371,7 +371,7 @@ The actual content path is hidden from network observers. Only the key ID is vis
 \subsubsection{\texttt{\%chum} namespace (1-to-1 encrypted)}
 \label{chum-namespace-1-to-1-encrypted}
 
-The \lstinline[style=inlinecode]{%chum} namespace is intended for one-to-one encrypted data sharing between two ships.  Authentication utilizes \textsc{hmac} only (without signatures).  The message is encrypted with XChaCha20-8 using a symmetric key derived from Curve25519 \textsc{ecdh} key exchange between the two ships' networking keys.  A 16-byte \textsc{hmac} (BLAKE3 keyed hash) is computed over the encoded beam path and the \textsc{lss} root of the encrypted data, using the same \textsc{ecdh}-derived symmetric key. Both parties can independently derive this key from their own private key and the other party's public key. The receiver verifies the \textsc{hmac} using the shared symmetric key, then decrypts with the same key.  In this security model, the \textsc{hmac} proves the sender possesses the shared symmetric key (implicitly authenticating them as the expected peer). No signatures are needed since only two parties share this key. This applies to both pokes and acks.
+The \lstinline[style=inlinecode]{%chum} namespace is intended for one-to-one encrypted data sharing between two ships.  Authentication utilizes \textsc{hmac} only (without signatures).  The message is encrypted with XChaCha8 using a symmetric key derived from Curve25519 \textsc{ecdh} key exchange between the two ships' networking keys.  A 16-byte \textsc{hmac} (BLAKE3 keyed hash) is computed over the encoded beam path and the \textsc{lss} root of the encrypted data, using the same \textsc{ecdh}-derived symmetric key. Both parties can independently derive this key from their own private key and the other party's public key. The receiver verifies the \textsc{hmac} using the shared symmetric key, then decrypts with the same key.  In this security model, the \textsc{hmac} proves the sender possesses the shared symmetric key (implicitly authenticating them as the expected peer). No signatures are needed since only two parties share this key. This applies to both pokes and acks.
 
 The \lstinline[style=inlinecode]{%chum} namespace uses encrypted paths with structure:
 
@@ -404,7 +404,9 @@ Directed Messaging relies on the ability to rotate keys on chain for its forward
 % TODO: more diagrams, clearer explanation of Lackman traversal
 
 One of the goals of Directed Messaging was to improve upon the
-conservative safe-but-dumb ``sign every 1~KiB packet'' design of old Ames.\footnote{To wit, as first described in the Urbit whitepaper \citep{Whitepaper}.} The standard approach is to use asymmetric crypto to establish a shared \textsc{aead} key, and use it to authenticate each packet. This is just as safe as signing every packet, and orders of magnitude faster. However, we still can't verify that a peer is sending us \emph{correct} data until we've received the entire message. They could send us 999 good packets and one bad one, and we'd have no way of knowing which was which. This is especially annoying if we want to download in parallel from multiple peers: if the final result is invalid, which peer is to blame? If we want to solve this problem, we need to get a little more bespoke.
+conservative safe-but-dumb ``sign every 1~KiB packet'' design of old Ames.
+%\footnote{To wit, as first described in the Urbit whitepaper \citep{Whitepaper}.}
+The standard approach is to use asymmetric crypto to establish a shared \textsc{aead} key, and use it to authenticate each packet. This is just as safe as signing every packet, and orders of magnitude faster. However, we still can't verify that a peer is sending us \emph{correct} data until we've received the entire message. They could send us 999 good packets and one bad one, and we'd have no way of knowing which was which. This is especially annoying if we want to download in parallel from multiple peers: if the final result is invalid, which peer is to blame? If we want to solve this problem, we need to get a little more bespoke.
 
 Verifying that a packet belongs to a particular message is a job for a Merkle tree. So our protocol needs to split message data into the leaves of a tree, and send both leaf data and tree hashes. Early on, we debated whether to make these distinct request types; we settled on interleaving them. Now the question becomes: which tree hashes do you need to send, and when do you send them?
 
