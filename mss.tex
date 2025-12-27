@@ -86,14 +86,10 @@ Directed Messaging managed to improve throughput while preserving Urbit's alread
 
 In addition to performance improvements, Directed Messaging scales better by leveraging runtime caching to disseminate data to many clients simultaneously. This strategy is particularly effective within Urbit's immutable scry namespace. Directed Messaging also introduces a new procedure for peer discovery and routing that is much more reliable and performant than the previous setups. It deals better with \textsc{nat} traversal and with using supernodes as relays more efficiently and reliably.
 
-All of this is done by simplifying the basic networking structure to
-enforce a rigid request-response discipline throughout the entire
-system. In addition to that, it also places all network messages,
-including acknowledgments and commands, in addition to responses for
-queries asking for data, into the referentially transparent scry namespace. This makes Urbit's entire networking stack a named data networking system, which is also called content-centric networking. As far as the authors know, Directed Messaging is the very first production deployment of a content-centric networking protocol, as well as the deployment with the largest number of nodes. Not only that, its content-centricity preserves the immutability of Urbit's namespace throughout the stack. The immutability is key to the scalability improvements and reliability improvements, and it also helps with single-threaded performance.
+All of this is done by simplifying the basic networking structure to enforce a rigid request-response discipline throughout the entire system. In addition to that, it also places all network messages, including acknowledgments and commands, in addition to responses for queries asking for data, into the referentially transparent scry namespace. This makes Urbit's entire networking stack a named data networking system, which is also called content-centric networking. As far as the authors know, Directed Messaging is the very first production deployment of a content-centric networking protocol, as well as the deployment with the largest number of nodes. Not only that, its content-centricity preserves the immutability of Urbit's namespace throughout the stack. The immutability is key to the scalability improvements and reliability improvements, and it also helps with single-threaded performance.
 
 \sloppy
-Along the way, we designed and implemented a novel scheme for streaming packet authentication. This helps prevent denial-of-service attacks that could forge individual packets and spoof them in order to invalidate a large download. This attack is prevented by authenticating every packet, but unlike the previous version of Urbit's networking stack, which authenticated each packet with a signature (meaning one signature for every kilobyte of data, which was extremely inefficient), there's only one signature per message. A Merkelization scheme using binary numeral trees (TODO: cite) is used to authenticate the packets within that message.
+Along the way, we designed and implemented a novel scheme for streaming packet authentication. This helps prevent denial-of-service attacks that could forge individual packets and spoof them in order to invalidate a large download. This attack is prevented by authenticating every packet, but unlike the previous version of Urbit's networking stack, which authenticated each packet with a signature (meaning one signature for every kilobyte of data, which was extremely inefficient), there's only one signature per message. A Merkelization scheme using binary numeral trees is used to authenticate the packets within that message \citep{Champine2021}.
 
 This achieves a property that, to our knowledge, has not been demonstrated in prior packet authentication schemes: the ability to handle a different maximum transmission unit (\textsc{mtu}) at each hop in a relay chain without losing packet-level authentication. It is a scale-invariant packet-authentication scheme, and it also has good memory use characteristics, due to a novel algorithm based on the ``Lackman'' scale-invariant tree-traversal pattern developed by the authors. A relay receiving packets of one size and emitting packets of another size only needs to hold one large packet in memory while streaming (e.\,g.\ if receiving 1~kiB packets and sending 16kiB packets, it only needs to store 16~kiB of packet data at a time). It can seamlessly handle any \textsc{mtu} that is one kilobyte, two kilobytes, or any power-of-two number of kilobytes above that, up to 128~MiB.
 
@@ -230,7 +226,7 @@ The \textsc{ndn} family of protocols, created by Van Jacobson~et~al. in the mid-
 
 Previous Urbit network protocols still included the sender's Urbit identity in the request packets, failing to achieve the ``source independence'' property that defines \textsc{ndn}. Directed Messaging is completely source-independent for reads, and for commands, it piggybacks a source-independent response onto a source-independent request in such a way that the receiver does know which Urbit address sent the request, but not in a way that requires packet routing to know or use the source Urbit address.
 
-Source independence lets the routing operate fully locally, i.\,e.\ without reference to or knowledge of anything beyond a single hop away in either direction. This minimizes the data storage and synchronization requirements for nodes, which could become significant at scale.
+Source independence lets the routing operate fully locally, without reference to or knowledge of anything beyond a single hop away in either direction. This minimizes the data storage and synchronization requirements for nodes, which could become significant at scale.
 
 Source independence entails stateful routing. Directed Messaging adopts \textsc{ndn}'s Pending Interest Table, which stores a mapping from each outstanding request to the IP and port that sent that request. If the request times out (after roughly 30 seconds), or the request is satisfied by a response, the request is deleted from the table.
 
@@ -400,15 +396,10 @@ Directed Messaging relies on the ability to rotate keys on chain for its forward
 \subsection{Packet Authentication}
 \label{packet-authentication}
 
-% TODO: more closely match the tone of the rest of this document
-% TODO: more diagrams, clearer explanation of Lackman traversal
-
 One of the goals of Directed Messaging was to improve upon the
-conservative safe-but-dumb ``sign every 1~KiB packet'' design of old Ames.
-%\footnote{To wit, as first described in the Urbit whitepaper \citep{Whitepaper}.}
-The standard approach is to use asymmetric crypto to establish a shared \textsc{aead} key, and use it to authenticate each packet. This is just as safe as signing every packet, and orders of magnitude faster. However, we still can't verify that a peer is sending us \emph{correct} data until we've received the entire message. They could send us 999 good packets and one bad one, and we'd have no way of knowing which was which. This is especially annoying if we want to download in parallel from multiple peers: if the final result is invalid, which peer is to blame? If we want to solve this problem, we need to get a little more bespoke.
+safe but dumb conservative design of old Ames to sign every 1~KiB packet. The standard approach is to use asymmetric crypto to establish a shared \textsc{aead} key, and use it to authenticate each packet. This is just as safe as signing every packet, and orders of magnitude faster. However, one still can't verify that a peer is sending \emph{correct} data until one has received the entire message. The remote could send 999 good packets and one bad, and the receiver has no way of knowing which was which. This is especially annoying if one wants to download in parallel from multiple peers: if the final result is invalid, which peer is to blame?
 
-Verifying that a packet belongs to a particular message is a job for a Merkle tree. So our protocol needs to split message data into the leaves of a tree, and send both leaf data and tree hashes. Early on, we debated whether to make these distinct request types; we settled on interleaving them. Now the question becomes: which tree hashes do you need to send, and when do you send them?
+Verifying that a packet belongs to a particular message is a job for a Merkle tree. Thus the protocol needs to split message data into the leaves of a tree, and send both leaf data and tree hashes. Early on, we debated whether to make these distinct request types; we settled on interleaving them. Now the question becomes: which tree hashes does one need to send, and when does one send them?
 
 The relevant design constraints were:
 \begin{enumerate}
@@ -1064,6 +1055,7 @@ The \lstinline[style=inlinecode]{[x,y)} notation indicates a half-open set, i.\,
 Packet 0: Signed Merkle root + Merkle proof for leaf 0.
           Verify proof against signed root.
           We now have [0,1), [1,2), [2,4), [4,8), [8,16), and [16,19).
+
 Packet 1: Leaf 0 + Pair a.
           Verify leaf 0 against [0,1).
           Verify pair a against [2,4).
@@ -1079,9 +1071,9 @@ Packet 3: Leaf 2 + Pair c.
 ... and so on.
 \end{lstlisting}
 
-Shortly after, \patp{watter-parter} tweaked the ordering slightly, offsetting it by one; this further simplified the low-level bithacking. We called this variant ``Lackman ordering,'' and it's what we used in the final version of Lockstep Streaming.  A diagram of the order is depicted in Figure~\ref{fig:lackman-1}.
+Shortly after, \patp{watter-parter} tweaked the ordering slightly, offsetting it by one; this further simplified the low-level bithacking. We called this variant ``Lackman ordering,'' and it is used in the final version of Lockstep Streaming.  A diagram of the order is depicted in Figure~\ref{fig:lackman-1}.
 
-Packet-by-packet verification for Lackman ordering looks like this:
+Per-packet verification for Lackman ordering looks like:
 
 \begin{lstlisting}[style=listingblock]
 Packet 0: Signed Merkle root + Merkle proof for leaf 0.
@@ -1128,19 +1120,46 @@ Packet 3: Leaf 2 + Pair b.
       \node[draw=black, thick, fill=white, circle, inner sep=2pt] (X16) at (0,0.5) {};
       \node[draw=black, thick, fill=white, circle, inner sep=2pt] (X17) at (0.5,0.5) {};
       \node[draw=black, thick, dotted, fill=white, circle, inner sep=2pt] (X18) at (1,0.5) {};
+      \node[draw=black, ultra thin, circle, inner sep=2pt] (X18) at (1,0.5) {};
+      %
       \node[draw=black, thick, dotted, fill=white, circle, inner sep=2pt] (X19) at (1.5,0.5) {};
+      \node[draw=black, ultra thin, circle, inner sep=2pt] (X19) at (1.5,0.5) {};
+      %
       \node[draw=black, thick, dotted, fill=white, circle, inner sep=2pt] (X20) at (2,0.5) {};
-      \node[draw=black, thick, dotted, fill=white, circle, inner sep=2pt] (X21) at (2.5,0.5) {}; 
+      \node[draw=black, ultra thin, circle, inner sep=2pt] (X20) at (2,0.5) {};
+      %
+      \node[draw=black, thick, dotted, fill=white, circle, inner sep=2pt] (X21) at (2.5,0.5) {};
+      \node[draw=black, ultra thin, circle, inner sep=2pt] (X21) at (2.5,0.5) {};
+      %
       \node[draw=black, thick, dotted, fill=white, circle, inner sep=2pt] (X22) at (3,0.5) {};
+      \node[draw=black, ultra thin, circle, inner sep=2pt] (X22) at (3,0.5) {};
+      %
       \node[draw=black, thick, dotted, fill=white, circle, inner sep=2pt] (X23) at (3.5,0.5) {};
+      \node[draw=black, ultra thin, circle, inner sep=2pt] (X23) at (3.5,0.5) {};
+      %
       \node[draw=black, thick, dotted, fill=white, circle, inner sep=2pt] (X24) at (4,0.5) {};
+      \node[draw=black, ultra thin, circle, inner sep=2pt] (X24) at (4,0.5) {};
+      %
       \node[draw=black, thick, dotted, fill=white, circle, inner sep=2pt] (X25) at (4.5,0.5) {};
+      \node[draw=black, ultra thin, circle, inner sep=2pt] (X25) at (4.5,0.5) {};
+      %
       \node[draw=black, thick, dotted, fill=white, circle, inner sep=2pt] (X26) at (5,0.5) {};
+      \node[draw=black, ultra thin, circle, inner sep=2pt] (X26) at (5,0.5) {};
+      %
       \node[draw=black, thick, dotted, fill=white, circle, inner sep=2pt] (X27) at (5.5,0.5) {};
+      \node[draw=black, ultra thin, circle, inner sep=2pt] (X27) at (5.5,0.5) {};
+      %
       \node[draw=black, thick, dotted, fill=white, circle, inner sep=2pt] (X28) at (6,0.5) {};
+      \node[draw=black, ultra thin, circle, inner sep=2pt] (X28) at (6,0.5) {};
+      %
       \node[draw=black, thick, dotted, fill=white, circle, inner sep=2pt] (X29) at (6.5,0.5) {};
+      \node[draw=black, ultra thin, circle, inner sep=2pt] (X29) at (6.5,0.5) {};
+      %
       \node[draw=black, thick, dotted, fill=white, circle, inner sep=2pt] (X30) at (7,0.5) {};
+      \node[draw=black, ultra thin, circle, inner sep=2pt] (X30) at (7,0.5) {};
+      %
       \node[draw=black, thick, dotted, fill=white, circle, inner sep=2pt] (X31) at (7.5,0.5) {};
+      \node[draw=black, ultra thin, circle, inner sep=2pt] (X31) at (7.5,0.5) {};
       %
       \node[draw=black, thick, fill=white, circle, inner sep=2pt] (Y32) at (0,0) {};
       \node[draw=black, thick, fill=white, circle, inner sep=2pt] (Y33) at (0.25,0) {};
@@ -1195,19 +1214,33 @@ Packet 3: Leaf 2 + Pair b.
       \draw[thick, double] (W8) -- (X16);
       \draw[thick, double] (W8) -- (X17);
       \draw[thick, dotted] (W9) -- (X18);
+      \draw[ultra thin] (W9) -- (X18);
       \draw[thick, dotted] (W9) -- (X19);
+      \draw[ultra thin] (W9) -- (X19);
       \draw[thick, dotted] (W10) -- (X20);
+      \draw[ultra thin] (W10) -- (X20);
       \draw[thick, dotted] (W10) -- (X21);
+      \draw[ultra thin] (W10) -- (X21);
       \draw[thick, dotted] (W11) -- (X22);
+      \draw[ultra thin] (W11) -- (X22);
       \draw[thick, dotted] (W11) -- (X23);
+      \draw[ultra thin] (W11) -- (X23);
       \draw[thick, dotted] (W12) -- (X24);
+      \draw[ultra thin] (W12) -- (X24);
       \draw[thick, dotted] (W12) -- (X25);
+      \draw[ultra thin] (W12) -- (X25);
       \draw[thick, dotted] (W13) -- (X26);
+      \draw[ultra thin] (W13) -- (X26);
       \draw[thick, dotted] (W13) -- (X27);
+      \draw[ultra thin] (W13) -- (X27);
       \draw[thick, dotted] (W14) -- (X28);
+      \draw[ultra thin] (W14) -- (X28);
       \draw[thick, dotted] (W14) -- (X29);
+      \draw[ultra thin] (W14) -- (X29);
       \draw[thick, dotted] (W15) -- (X30);
+      \draw[ultra thin] (W15) -- (X30);
       \draw[thick, dotted] (W15) -- (X31);
+      \draw[ultra thin] (W15) -- (X31);
       %
       \draw[thick, double] (X16) -- (Y32);
       \draw[thick, double] (X16) -- (Y33);
@@ -1253,8 +1286,11 @@ Packet 3: Leaf 2 + Pair b.
       \node[draw=black, thick, fill=black, circle, inner sep=1.75pt] (T1) at (0.75,15.5) {};
       %
       \node[draw=black, thick, dotted, fill=white, rectangle, inner sep=2.25pt] (T1) at (0.5,15.25) {};
+      \node[draw=black, ultra thin, rectangle, inner sep=2.25pt] (T1) at (0.5,15.25) {};
       \node[draw=black, thick, dotted, fill=white, circle, inner sep=1.75pt] (T1) at (1.0,15.25) {};
+      \node[draw=black, ultra thin, circle, inner sep=1.75pt] (T1) at (1.0,15.25) {};
       \node[draw=black, thick, dotted, fill=white, circle, inner sep=1.75pt] (T1) at (1.5,15.25) {};
+      \node[draw=black, ultra thin, circle, inner sep=1.75pt] (T1) at (1.5,15.25) {};
       %
       \node[draw=black, thick, fill=black, rectangle, inner sep=2.25pt] (T1) at (0.75,15) {};
       \node[draw=black, thick, fill=black, circle, inner sep=1.75pt] (T1) at (1.0,15) {};
@@ -1269,8 +1305,11 @@ Packet 3: Leaf 2 + Pair b.
       \node[draw=black, thick, fill=black, circle, inner sep=1.75pt] (T1) at (1.75,14.5) {};
       %
       \node[draw=black, thick, dotted, fill=white, rectangle, inner sep=2.25pt] (T1) at (1.5,14.25) {};
+      \node[draw=black, ultra thin, rectangle, inner sep=2.25pt] (T1) at (1.5,14.25) {};
       \node[draw=black, thick, dotted, fill=white, circle, inner sep=1.75pt] (T1) at (2,14.25) {};
+      \node[draw=black, ultra thin, circle, inner sep=1.75pt] (T1) at (2,14.25) {};
       \node[draw=black, thick, dotted, fill=white, circle, inner sep=1.75pt] (T1) at (2.5,14.25) {};
+      \node[draw=black, ultra thin, circle, inner sep=1.75pt] (T1) at (2.5,14.25) {};
       %
       \node[draw=black, thick, fill=black, rectangle, inner sep=2.25pt] (T1) at (1.75,14) {};
       \node[draw=black, thick, fill=black, circle, inner sep=1.75pt] (T1) at (2,14) {};
@@ -1285,8 +1324,11 @@ Packet 3: Leaf 2 + Pair b.
       \node[draw=black, thick, fill=black, circle, inner sep=1.75pt] (T1) at (2.75,13.5) {};
       %
       \node[draw=black, thick, dotted, fill=white, rectangle, inner sep=2.25pt] (T1) at (2.5,13.25) {};
+      \node[draw=black, ultra thin, rectangle, inner sep=2.25pt] (T1) at (2.5,13.25) {};
       \node[draw=black, thick, dotted, fill=white, circle, inner sep=1.75pt] (T1) at (3,13.25) {};
+      \node[draw=black, ultra thin, circle, inner sep=1.75pt] (T1) at (3,13.25) {};
       \node[draw=black, thick, dotted, fill=white, circle, inner sep=1.75pt] (T1) at (3.5,13.25) {};
+      \node[draw=black, ultra thin, circle, inner sep=1.75pt] (T1) at (3.5,13.25) {};
       %
       \node[draw=black, thick, fill=black, rectangle, inner sep=2.25pt] (T1) at (2.75,13) {};
       \node[draw=black, thick, fill=black, circle, inner sep=1.75pt] (T1) at (3,13) {};
@@ -1301,8 +1343,11 @@ Packet 3: Leaf 2 + Pair b.
       \node[draw=black, thick, fill=black, circle, inner sep=1.75pt] (T1) at (3.75,12.5) {};
       %
       \node[draw=black, thick, dotted, fill=white, rectangle, inner sep=2.25pt] (T1) at (3.5,12.25) {};
+      \node[draw=black, ultra thin, rectangle, inner sep=2.25pt] (T1) at (3.5,12.25) {};
       \node[draw=black, thick, dotted, fill=white, circle, inner sep=1.75pt] (T1) at (4,12.25) {};
+      \node[draw=black, ultra thin, circle, inner sep=1.75pt] (T1) at (4,12.25) {};
       \node[draw=black, thick, dotted, fill=white, circle, inner sep=1.75pt] (T1) at (4.5,12.25) {};
+      \node[draw=black, ultra thin, circle, inner sep=1.75pt] (T1) at (4.5,12.25) {};
       %
       \node[draw=black, thick, fill=black, rectangle, inner sep=2.25pt] (T1) at (3.75,12) {};
       \node[draw=black, thick, fill=black, circle, inner sep=1.75pt] (T1) at (4,12) {};
@@ -1315,8 +1360,11 @@ Packet 3: Leaf 2 + Pair b.
       \node[draw=black, thick, fill=black, circle, inner sep=1.75pt] (T1) at (4.75,11.5) {};
       %
       \node[draw=black, thick, dotted, fill=white, rectangle, inner sep=2.25pt] (T1) at (4.5,11.25) {};
+      \node[draw=black, ultra thin, rectangle, inner sep=2.25pt] (T1) at (4.5,11.25) {};
       \node[draw=black, thick, dotted, fill=white, circle, inner sep=1.75pt] (T1) at (5,11.25) {};
+      \node[draw=black, ultra thin, circle, inner sep=1.75pt] (T1) at (5,11.25) {};
       \node[draw=black, thick, dotted, fill=white, circle, inner sep=1.75pt] (T1) at (5.5,11.25) {};
+      \node[draw=black, ultra thin, circle, inner sep=1.75pt] (T1) at (5.5,11.25) {};
       %
       \node[draw=black, thick, fill=black, rectangle, inner sep=2.25pt] (T1) at (4.75,11) {};
       \node[draw=black, thick, fill=black, circle, inner sep=1.75pt] (T1) at (5,11) {};
@@ -1331,8 +1379,11 @@ Packet 3: Leaf 2 + Pair b.
       \node[draw=black, thick, fill=black, circle, inner sep=1.75pt] (T1) at (5.75,10.5) {};
       %
       \node[draw=black, thick, dotted, fill=white, rectangle, inner sep=2.25pt] (T1) at (5.5,10.25) {};
+      \node[draw=black, ultra thin, rectangle, inner sep=2.25pt] (T1) at (5.5,10.25) {};
       \node[draw=black, thick, dotted, fill=white, circle, inner sep=1.75pt] (T1) at (6,10.25) {};
+      \node[draw=black, ultra thin, circle, inner sep=1.75pt] (T1) at (6,10.25) {};
       \node[draw=black, thick, dotted, fill=white, circle, inner sep=1.75pt] (T1) at (6.5,10.25) {};
+      \node[draw=black, ultra thin, circle, inner sep=1.75pt] (T1) at (6.5,10.25) {};
       %
       \node[draw=black, thick, fill=black, rectangle, inner sep=2.25pt] (T1) at (5.75,10) {};
       \node[draw=black, thick, fill=black, circle, inner sep=1.75pt] (T1) at (6,10) {};
@@ -1345,8 +1396,11 @@ Packet 3: Leaf 2 + Pair b.
       \node[draw=black, thick, fill=black, circle, inner sep=1.75pt] (T1) at (6.75,9.5) {};
       %
       \node[draw=black, thick, dotted, fill=white, rectangle, inner sep=2.25pt] (T1) at (6.5,9.25) {};
+      \node[draw=black, ultra thin, rectangle, inner sep=2.25pt] (T1) at (6.5,9.25) {};
       \node[draw=black, thick, dotted, fill=white, circle, inner sep=1.75pt] (T1) at (7,9.25) {};
+      \node[draw=black, ultra thin, circle, inner sep=1.75pt] (T1) at (7,9.25) {};
       \node[draw=black, thick, dotted, fill=white, circle, inner sep=1.75pt] (T1) at (7.5,9.25) {};
+      \node[draw=black, ultra thin, circle, inner sep=1.75pt] (T1) at (7.5,9.25) {};
       %
       \node[draw=black, thick, fill=black, rectangle, inner sep=2.25pt] (T1) at (6.75,9) {};
       \node[draw=black, thick, fill=black, circle, inner sep=1.75pt] (T1) at (7,9) {};
@@ -1499,7 +1553,9 @@ Packet 3: Leaf 2 + Pair b.
       \node[draw=black, thick, fill=white, circle, inner sep=2pt] (X16) at (0,0.5) {};
       \node[draw=black, thick, fill=white, circle, inner sep=2pt] (X17) at (0.5,0.5) {};
       \node[draw=black, thick, dotted, fill=white, circle, inner sep=2pt] (X18) at (1,0.5) {};
+      \node[draw=black, ultra thin, circle, inner sep=2pt] (X18) at (1,0.5) {};
       \node[draw=black, thick, dotted, fill=white, circle, inner sep=2pt] (X19) at (1.5,0.5) {};
+      \node[draw=black, ultra thin, circle, inner sep=2pt] (X19) at (1.5,0.5) {};
       \node[draw=black, thick, fill=white, circle, inner sep=2pt] (X20) at (2,0.5) {};
       \node[draw=black, thick, fill=white, circle, inner sep=2pt] (X21) at (2.5,0.5) {}; 
       \node[draw=black, thick, fill=white, circle, inner sep=2pt] (X22) at (3,0.5) {};
@@ -1558,7 +1614,9 @@ Packet 3: Leaf 2 + Pair b.
       \draw[thick, double] (W8) -- (X16);
       \draw[thick, double] (W8) -- (X17);
       \draw[thick, dotted] (W9) -- (X18);
+      \draw[ultra thin] (W9) -- (X18);
       \draw[thick, dotted] (W9) -- (X19);
+      \draw[ultra thin] (W9) -- (X19);
       %
       \draw[thick, double] (X16) -- (Y32);
       \draw[thick, double] (X16) -- (Y33);
@@ -1576,8 +1634,11 @@ Packet 3: Leaf 2 + Pair b.
       \node[draw=black, thick, fill=black, circle, inner sep=1.75pt] (T1) at (0.75,15.5) {};
       %
       \node[draw=black, thick, dotted, fill=white, rectangle, inner sep=2.25pt] (T1) at (0.5,15.25) {};
+      \node[draw=black, ultra thin, rectangle, inner sep=2.25pt] (T1) at (0.5,15.25) {};
       \node[draw=black, thick, dotted, fill=white, circle, inner sep=1.75pt] (T1) at (1.0,15.25) {};
+      \node[draw=black, ultra thin, circle, inner sep=1.75pt] (T1) at (1.0,15.25) {};
       \node[draw=black, thick, dotted, fill=white, circle, inner sep=1.75pt] (T1) at (1.5,15.25) {};
+      \node[draw=black, ultra thin, circle, inner sep=1.75pt] (T1) at (1.5,15.25) {};
       %
       \node[draw=white, thick, fill=white, circle, inner sep=2pt] (T1) at (7.75,15.5) {};
     \end{tikzpicture}
@@ -1609,7 +1670,9 @@ Packet 3: Leaf 2 + Pair b.
       \node[draw=black, thick, fill=white, circle, inner sep=2pt] (X16) at (0,0.5) {};
       \node[draw=black, thick, fill=white, circle, inner sep=2pt] (X17) at (0.5,0.5) {};
       \node[draw=black, thick, dotted, fill=white, circle, inner sep=2pt] (X18) at (1,0.5) {};
+      \node[draw=black, ultra thin, circle, inner sep=2pt] (X18) at (1,0.5) {};
       \node[draw=black, thick, dotted, fill=white, circle, inner sep=2pt] (X19) at (1.5,0.5) {};
+      \node[draw=black, ultra thin, circle, inner sep=2pt] (X19) at (1.5,0.5) {};
       \node[draw=black, thick, fill=white, circle, inner sep=2pt] (X20) at (2,0.5) {};
       \node[draw=black, thick, fill=white, circle, inner sep=2pt] (X21) at (2.5,0.5) {}; 
       \node[draw=black, thick, fill=white, circle, inner sep=2pt] (X22) at (3,0.5) {};
@@ -1668,7 +1731,9 @@ Packet 3: Leaf 2 + Pair b.
       \draw[thick, double] (W8) -- (X16);
       \draw[thick, double] (W8) -- (X17);
       \draw[thick, dotted] (W9) -- (X18);
+      \draw[ultra thin] (W9) -- (X18);
       \draw[thick, dotted] (W9) -- (X19);
+      \draw[ultra thin] (W9) -- (X19);
       %
       \draw[thick, double] (X16) -- (Y32);
       \draw[thick, double] (X16) -- (Y33);
@@ -1688,8 +1753,11 @@ Packet 3: Leaf 2 + Pair b.
       \node[draw=black, thick, fill=black, circle, inner sep=1.75pt] (T1) at (0.75,15.5) {};
       %
       \node[draw=black, thick, dotted, fill=white, rectangle, inner sep=2.25pt] (T1) at (0.5,15.25) {};
+      \node[draw=black, ultra thin, rectangle, inner sep=2.25pt] (T1) at (0.5,15.25) {};
       \node[draw=black, thick, dotted, fill=white, circle, inner sep=1.75pt] (T1) at (1.0,15.25) {};
+      \node[draw=black, ultra thin, circle, inner sep=1.75pt] (T1) at (1.0,15.25) {};
       \node[draw=black, thick, dotted, fill=white, circle, inner sep=1.75pt] (T1) at (1.5,15.25) {};
+      \node[draw=black, ultra thin, circle, inner sep=1.75pt] (T1) at (1.5,15.25) {};
       %
       \node[draw=black, thick, fill=black, rectangle, inner sep=2.25pt] (T1) at (0.75,15.0) {};
       \node[draw=black, thick, fill=black, circle, inner sep=1.75pt] (T1) at (1,15.0) {};
@@ -1725,7 +1793,9 @@ Packet 3: Leaf 2 + Pair b.
       \node[draw=black, thick, fill=white, circle, inner sep=2pt] (X16) at (0,0.5) {};
       \node[draw=black, thick, fill=white, circle, inner sep=2pt] (X17) at (0.5,0.5) {};
       \node[draw=black, thick, dotted, fill=white, circle, inner sep=2pt] (X18) at (1,0.5) {};
+      \node[draw=black, ultra thin, circle, inner sep=2pt] (X18) at (1,0.5) {};
       \node[draw=black, thick, dotted, fill=white, circle, inner sep=2pt] (X19) at (1.5,0.5) {};
+      \node[draw=black, ultra thin, circle, inner sep=2pt] (X19) at (1.5,0.5) {};
       \node[draw=black, thick, fill=white, circle, inner sep=2pt] (X20) at (2,0.5) {};
       \node[draw=black, thick, fill=white, circle, inner sep=2pt] (X21) at (2.5,0.5) {}; 
       \node[draw=black, thick, fill=white, circle, inner sep=2pt] (X22) at (3,0.5) {};
@@ -1786,7 +1856,9 @@ Packet 3: Leaf 2 + Pair b.
       \draw[thick, double] (W8) -- (X16);
       \draw[thick, double] (W8) -- (X17);
       \draw[thick, dotted] (W9) -- (X18);
+      \draw[ultra thin] (W9) -- (X18);
       \draw[thick, dotted] (W9) -- (X19);
+      \draw[ultra thin] (W9) -- (X19);
       %
       \draw[thick, double] (X16) -- (Y32);
       \draw[thick, double] (X16) -- (Y33);
@@ -1806,8 +1878,11 @@ Packet 3: Leaf 2 + Pair b.
       \node[draw=black, thick, fill=black, circle, inner sep=1.75pt] (T1) at (0.75,15.5) {};
       %
       \node[draw=black, thick, dotted, fill=white, rectangle, inner sep=2.25pt] (T1) at (0.5,15.25) {};
+      \node[draw=black, ultra thin, rectangle, inner sep=2.25pt] (T1) at (0.5,15.25) {};
       \node[draw=black, thick, dotted, fill=white, circle, inner sep=1.75pt] (T1) at (1.0,15.25) {};
+      \node[draw=black, ultra thin, circle, inner sep=1.75pt] (T1) at (1.0,15.25) {};
       \node[draw=black, thick, dotted, fill=white, circle, inner sep=1.75pt] (T1) at (1.5,15.25) {};
+      \node[draw=black, ultra thin, circle, inner sep=1.75pt] (T1) at (1.5,15.25) {};
       %
       \node[draw=black, thick, fill=black, rectangle, inner sep=2.25pt] (T1) at (0.75,15.0) {};
       \node[draw=black, thick, fill=black, circle, inner sep=1.75pt] (T1) at (1,15.0) {};
@@ -2031,7 +2106,7 @@ However, this also means that multiple concurrent large transfers to the same pe
 \subsection{Initial Window and Probing}
 \label{initial-window-and-probing}
 
-New peer connections begin with conservative initial values: \lstinline[style=inlinecode]{cwnd = 1}, \lstinline[style=inlinecode]{rtt = 1000 ms}, \lstinline[style=inlinecode]{rttvar = 1000 ms}, \lstinline[style=inlinecode]{rto = 200 ms}. The first fragment request initiates \textsc{rtt} measurement and slow start growth. This cautious initialization ensures the protocol probes network capacity gradually rather than assuming high bandwidth is available.
+New peer connections begin with conservative initial values: \lstinline[style=inlinecode]{cwnd = 1}, \lstinline[style=inlinecode]{rtt = 1.000} ms, \lstinline[style=inlinecode]{rttvar = 1.000} ms, \lstinline[style=inlinecode]{rto = 200} ms.\footnote{Hoon atoms are written German-style, thus \texttt{1.000} for ``one thousand''.} The first fragment request initiates \textsc{rtt} measurement and slow start growth. This cautious initialization ensures the protocol probes network capacity gradually rather than assuming high bandwidth is available.
 
 For peers with no recent traffic, the congestion state persists but becomes stale. Future enhancements may include state expiration and re-initialization after prolonged idle periods, though the current implementation maintains state indefinitely once a peer is known.
 
@@ -2094,7 +2169,7 @@ The current implementation represents a pragmatic balance between simplicity and
 \section{Integration}
 \label{integration}
 
-In order to deploy Directed Messaing to Urbit's live network, the previous version of the protocol needed to remain operational, since there is no central authority that can force Urbit ships to update to a particular version. The authors decided further that each ship should be able to upgrade connections to peer ships one by one and be able to downgrade it without data loss.
+In order to deploy Directed Messaging to Urbit's live network, the previous version of the protocol needed to remain operational, since there is no central authority that can force Urbit ships to update to a particular version. The developers further decided that each ship should be able to upgrade connections to peer ships one by one, and should be able to downgrade without data loss.
 
 This was possible due to the persistent, transactional nature of both the previous and new versions of the protocol.
 
